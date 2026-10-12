@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>加速度積分 與 GPS 測速器 Longhorn 5.1</title>
+  <title>加速度積分 與 GPS 測速器 Longhorn 5.2</title>
   <style>
   /* --- 基礎樣式還原 --- */
   * { box-sizing: border-box; }
@@ -242,7 +242,6 @@
   .graph-grid line { stroke: #282828; stroke-width: 1; stroke-dasharray: 3, 3; }
   .graph-grid line.axis-line { stroke: #555555; stroke-width: 1.5; stroke-dasharray: none; }
 
-  /* 積分速度線 (橘) 與 GPS 速度線 (青藍) */
   .vt-line-path { fill: none; stroke: #ff9800; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
   .vt-gps-line-path { fill: none; stroke: #00bcd4; stroke-width: 2.0; stroke-linecap: round; stroke-linejoin: round; }
   .vt-area-path { fill: #ff9800; fill-opacity: 0.12; stroke: none; }
@@ -257,14 +256,12 @@
     font-size: 0.7rem; font-weight: bold; cursor: pointer; z-index: 10; display: none;
   }
 
-  /* 互動提示層 (Tooltip & Guide Line) */
   .interactive-guideline { stroke: #ff9800; stroke-width: 1; stroke-dasharray: 4, 4; opacity: 0.7; }
   .interactive-focus-point { fill: #ff9800; stroke: #ffffff; stroke-width: 2; }
   .interactive-gps-focus-point { fill: #00bcd4; stroke: #ffffff; stroke-width: 2; }
   .interactive-tooltip-bg { fill: rgba(20, 20, 20, 0.94); stroke: #ff9800; stroke-width: 1; rx: 6; ry: 6; }
   .interactive-tooltip-text { fill: #ffffff; font-size: 10px; font-family: monospace !important; font-weight: bold; }
 
-  /* --- 歷史紀錄表格樣式 --- */
   .category-title { color: #fff !important; font-size: 0.95rem; font-weight: 800; }
 
   .page-header-row {
@@ -339,7 +336,6 @@
 
 <div class="calculator">
 
-  <!-- ================= 第一頁：測量器主畫面 ================= -->
   <div id="page-1" class="page-section active">
     <h1>加速度積分 與 GPS 測速器</h1>
 
@@ -354,7 +350,6 @@
       <span id="gps-status" class="status-tag status-inactive">GPS 定位：未啟動</span>
     </div>
 
-    <!-- 速度雙卡片 -->
     <div class="speed-compare-grid">
       <div class="speed-card">
         <div class="speed-card-title">積分速度</div>
@@ -366,7 +361,6 @@
       </div>
     </div>
 
-    <!-- 數據顯示面板 -->
     <div class="result-box">
       <div class="distance-compare-grid">
         <div class="distance-item">
@@ -402,7 +396,6 @@
       </div>
     </div>
 
-    <!-- 控制按鈕列 -->
     <div class="btn-row">
       <button id="btn-zero" class="ctrl-btn btn-zero-style">矯正歸零</button>
       <button id="btn-reset" class="reset-btn">重置</button>
@@ -410,7 +403,6 @@
       <button id="btn-toggle-gps" class="ctrl-btn btn-gps-idle">錄製 GPS</button>
     </div>
 
-    <!-- 參數與偏置面板 -->
     <div class="helper-box">
       <button type="button" id="btn-toggle-gyro" class="btn-fill" style="width:100%;margin-bottom:8px;color:#2ecc71;border-color:#2ecc71;">陀螺儀角速度補償：開啟</button>
       <button type="button" id="btn-retry-gyro" class="btn-fill" style="width:100%;margin-bottom:7px;color:#ffc66d;border-color:#a57838;">重新取得感測器權限</button>
@@ -435,7 +427,6 @@
       </div>
     </div>
 
-    <!-- 第一頁：即時 v-t 圖表 -->
     <div class="graph-container" id="p1-vtContainer">
       <button id="p1-btnResetZoom" class="btn-reset-zoom">重置縮放</button>
       <div class="graph-placeholder" id="p1-vtPlaceholder">
@@ -462,7 +453,6 @@
       </svg>
     </div>
 
-    <!-- 第一頁：最近 5 筆紀錄簡表 -->
     <div style="margin-top: 15px;">
       <h3 class="category-title" style="margin-bottom: 8px;">最近觀測紀錄</h3>
       <div class="record-table-wrapper">
@@ -485,8 +475,6 @@
     </div>
   </div>
 
-
-  <!-- ================= 第二頁：全面性紀錄專區 ================= -->
   <div id="page-2" class="page-section">
     <div class="page-header-row">
       <button id="btn-back-p1" class="btn-back-nav">←</button>
@@ -494,7 +482,6 @@
       <div style="width: 32px;"></div>
     </div>
 
-    <!-- 最上方 v-t 圖表渲染位置 -->
     <div class="graph-container" id="p2-vtContainer">
       <button id="p2-btnResetZoom" class="btn-reset-zoom">重置縮放</button>
       <div class="graph-placeholder" id="p2-vtPlaceholder">
@@ -521,7 +508,6 @@
       </svg>
     </div>
 
-    <!-- 第二頁：全面性紀錄表格 -->
     <div class="record-card" style="margin-top: 10px;">
       <div class="record-header">
         <span style="font-size: 0.8rem; color: #aaa;">詳細數據對照表</span>
@@ -560,17 +546,15 @@
   </div>
 
   <div style="text-align: center; font-size: 0.75rem; color: #555; margin-top: 15px;">
-    Longhorn 5.1
+    Longhorn 5.2
   </div>
 </div>
 
 <script>
-// --- 平台自動偵測 (iOS 判斷) ---
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
               (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const axisMultiplier = isIOS ? -1.0 : 1.0;
 
-// --- 螢幕恆亮 Wake Lock 管理 ---
 let wakeLock = null;
 async function requestWakeLock() {
   if ('wakeLock' in navigator) {
@@ -583,7 +567,6 @@ async function releaseWakeLock() {
   }
 }
 
-// --- 變數定義 ---
 let isAccelRecording = false, isGpsRecording = false, isCalibrated = false;
 let xOffset = 0.0, yOffset = 0.0;
 let currentRawX = 0.0, currentRawY = 0.0, filteredX = 0.0, filteredY = 0.0;
@@ -599,6 +582,45 @@ let lastAccelTimestamp = null, lastPointPushTime = 0, recordingStartTime = null,
 let lpfAlpha = 0.20; 
 let vtPointsData = [];
 let p2ActivePointsData = [];
+
+// --- Longhorn 5.2 引擎怠速與震動容忍過濾變數 ---
+let restDetectionWindow = [];
+const IDLE_RMS_THRESHOLD = 0.045; 
+const TRUE_REST_TIME_REQUIRED = 1200; 
+
+function evaluateEngineIdleRest(currentAccelY, currentGyroRate) {
+  const now = performance.now();
+  restDetectionWindow.push({
+    t: now,
+    accelY: currentAccelY,
+    gyro: Math.hypot(currentGyroRate.x, currentGyroRate.y, currentGyroRate.z)
+  });
+
+  while (restDetectionWindow.length && restDetectionWindow[0].t < now - TRUE_REST_TIME_REQUIRED) {
+    restDetectionWindow.shift();
+  }
+
+  if (restDetectionWindow.length < 15) return false;
+
+  let sumAccel = 0, sumGyro = 0;
+  restDetectionWindow.forEach(p => {
+    sumAccel += p.accelY;
+    sumGyro += p.gyro;
+  });
+  let meanAccel = sumAccel / restDetectionWindow.length;
+  let meanGyro = sumGyro / restDetectionWindow.length;
+
+  let variance = 0;
+  restDetectionWindow.forEach(p => {
+    variance += Math.pow(p.accelY - meanAccel, 2);
+  });
+  let rms = Math.sqrt(variance / restDetectionWindow.length);
+
+  const isSteadyMean = Math.abs(meanAccel) < 0.02 && Math.abs(meanGyro) < 0.08 * (Math.PI / 180);
+  const isValidIdleRms = rms < IDLE_RMS_THRESHOLD;
+
+  return isSteadyMean && isValidIdleRms;
+}
 
 // --- Whistler 陀螺儀動態重力補償變數 ---
 const GYRO_G = 9.80665;
@@ -649,14 +671,14 @@ function updateGyroStatus(force = false) {
   const el = document.getElementById('gyro-status');
   if (!el) return;
   let label, active = false;
-  if (!gyroEnabled) label = '陀螺儀角速度補償：關閉（原始積分）';
-  else if (!window.isSecureContext) label = '感測器不可用：請用 HTTPS 開啟';
+  if (!gyroEnabled) label = '陀螺儀補償：關閉';
+  else if (!window.isSecureContext) label = '感測器不可用：請用 HTTPS';
   else if (gyroPermissionState === 'denied') label = '感測器權限被拒絕';
-  else if (gyroPermissionState === 'error') label = '感測器授權錯誤：' + gyroPermissionError;
-  else if (gyroInterrupted) label = '陀螺儀中斷，請在車輛靜止時重新歸零';
-  else if (!gyroRateReady) label = '等待陀螺儀資料（目前原始積分）';
-  else if (!gyroReferenceReady) label = '陀螺儀已取得，請靜止按「矯正歸零」';
-  else { label = '陀螺儀角速度積分補償中'; active = true; }
+  else if (gyroPermissionState === 'error') label = '感測器授權錯誤';
+  else if (gyroInterrupted) label = '陀螺儀中斷，請重新歸零';
+  else if (!gyroRateReady) label = '等待陀螺儀資料...';
+  else if (!gyroReferenceReady) label = '已就緒，請靜止按「矯正歸零」';
+  else { label = '3D 陀螺儀補償與怠速防護中'; active = true; }
   el.textContent = label;
   el.className = `status-tag ${active ? 'status-active' : 'status-inactive'}`;
 }
@@ -664,24 +686,16 @@ function updateGyroStatus(force = false) {
 function requestGyroPermissionFromGesture() {
   if (!window.isSecureContext) {
     gyroPermissionState = 'error';
-    gyroPermissionError = '請以 HTTPS 開啟';
     updateGyroStatus(true);
     return;
   }
   if (typeof DeviceMotionEvent === 'undefined') {
     gyroPermissionState = 'error';
-    gyroPermissionError = '瀏覽器不支援 DeviceMotionEvent';
     updateGyroStatus(true);
     return;
   }
   gyroPermissionState = 'prompt';
-  gyroPermissionError = '';
-  let promise;
-  try {
-    promise = typeof DeviceMotionEvent.requestPermission === 'function' ? DeviceMotionEvent.requestPermission() : Promise.resolve('granted');
-  } catch (err) {
-    promise = Promise.reject(err);
-  }
+  let promise = typeof DeviceMotionEvent.requestPermission === 'function' ? DeviceMotionEvent.requestPermission() : Promise.resolve('granted');
   Promise.resolve(promise).then(state => {
     if (state === 'granted') {
       gyroPermissionState = 'granted';
@@ -691,9 +705,8 @@ function requestGyroPermissionFromGesture() {
       gyroPermissionState = 'denied';
     }
     updateGyroStatus(true);
-  }).catch(err => {
+  }).catch(() => {
     gyroPermissionState = 'error';
-    gyroPermissionError = String(err && (err.message || err.name) || err);
     updateGyroStatus(true);
   });
   updateGyroStatus(true);
@@ -708,7 +721,7 @@ function stepGyro(rate, now, smoothingAlpha) {
     }
     gyroLastTimestamp = null;
     updateGyroStatus();
-    return;
+    return null;
   }
   gyroRateReady = true;
   gyroLastRateTimestamp = now;
@@ -729,6 +742,7 @@ function stepGyro(rate, now, smoothingAlpha) {
   }
   gyroLastTimestamp = now;
   updateGyroStatus();
+  return omega;
 }
 
 function calibrateGyroFromRest() {
@@ -772,22 +786,11 @@ function calibrateGyroFromRest() {
   updateGyroStatus(true);
 }
 
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden && gyroReferenceReady) {
-    gyroInterrupted = true;
-    gyroReferenceReady = false;
-    gyroLastTimestamp = null;
-    updateGyroStatus(true);
-  }
-});
-
-// 圖表縮放與平移狀態管理
 const graphStates = {
   p1: { zoomScale: 1.0, panTranslateX: 0.0, initialPinchDistance: null, initialScale: 1.0, isDragging: false, startDragX: 0, startPanX: 0 },
   p2: { zoomScale: 1.0, panTranslateX: 0.0, initialPinchDistance: null, initialScale: 1.0, isDragging: false, startDragX: 0, startPanX: 0 }
 };
 
-// localStorage 讀取
 let records = [];
 try {
   const savedRecords = localStorage.getItem('speedometer_records_v41');
@@ -797,7 +800,6 @@ try {
 let currentPage = 1;
 const rowsPerPage = 5;
 
-// DOM 元素
 const page1 = document.getElementById('page-1');
 const page2 = document.getElementById('page-2');
 const btnGoPage2 = document.getElementById('btn-go-page2');
@@ -839,7 +841,6 @@ const btnPrevPage = document.getElementById('btn-prev-page');
 const btnNextPage = document.getElementById('btn-next-page');
 const pageInfoEl = document.getElementById('page-info');
 
-// 頁面切換控制
 btnGoPage2.addEventListener('click', () => {
   page1.classList.remove('active');
   page2.classList.add('active');
@@ -852,7 +853,6 @@ btnBackP1.addEventListener('click', () => {
   renderP1Records();
 });
 
-// 綁定陀螺儀控制按鈕
 document.getElementById('btn-request-permission').addEventListener('click', requestGyroPermissionFromGesture);
 document.getElementById('btn-retry-gyro').addEventListener('click', requestGyroPermissionFromGesture);
 
@@ -877,7 +877,6 @@ document.getElementById('btn-toggle-gyro').addEventListener('click', () => {
 
 document.getElementById('btn-request-gps').addEventListener('click', () => { initGpsListener(); });
 
-// 感測器監聽 (移除負速度計算，將速度下限鎖定於 0.0)
 function initSensorListener() {
   if (gyroMotionListening) return;
   gyroMotionListening = true;
@@ -894,7 +893,7 @@ function initSensorListener() {
     filteredY += lpfAlpha * (currentRawY - filteredY);
     filteredZ += lpfAlpha * (raw.z - filteredZ);
 
-    stepGyro(event.rotationRate, now, lpfAlpha);
+    const omega = stepGyro(event.rotationRate, now, lpfAlpha) || { x: 0, y: 0, z: 0 };
 
     let cleanAccelX = filteredX - xOffset;
     let cleanAccelY = filteredY - yOffset;
@@ -902,6 +901,12 @@ function initSensorListener() {
     if (gyroEnabled && gyroReferenceReady) {
       cleanAccelX -= (gyroSmoothedGravity.x - gyroReferenceGravity.x) * axisMultiplier;
       cleanAccelY -= (gyroSmoothedGravity.y - gyroReferenceGravity.y) * axisMultiplier;
+    }
+
+    // --- 導入 Longhorn 5.2 怠速防護：若判定為怠速震動，強制歸零雜訊 ---
+    if (evaluateEngineIdleRest(cleanAccelY, omega)) {
+      cleanAccelY = 0.0;
+      if (currentSpeed < 0.3) currentSpeed = 0.0; // 靜止時漸進把速度歸零
     }
 
     if (Math.abs(cleanAccelY) < 0.008) cleanAccelY = 0.0;
@@ -923,7 +928,7 @@ function initSensorListener() {
         if (dt > 0 && dt < 0.5) { 
           if (isAccelRecording) {
             currentSpeed += cleanAccelY * dt;
-            if (currentSpeed < 0) currentSpeed = 0.0; // 鎖定速度下限，去除負速度計算
+            if (currentSpeed < 0) currentSpeed = 0.0; 
             totalDisplacement += currentSpeed * dt;
 
             let speedKmh = currentSpeed * 3.6;
@@ -963,7 +968,6 @@ function initSensorListener() {
   });
 }
 
-// GPS 功能
 function calculateHaversineDistance(lat1, lon1, lat2, lon2) {
   const R = 6371e3;
   const dLat = (lat2 - lat1) * Math.PI / 180, dLon = (lon2 - lon1) * Math.PI / 180;
@@ -1019,7 +1023,6 @@ function initGpsListener() {
   );
 }
 
-// 應用 transform 矩陣轉換與更新刻度
 function applyZoomTransform(prefix) {
   const st = graphStates[prefix];
   const zoomGroup = document.getElementById(`${prefix}-vtZoomGroup`);
@@ -1055,7 +1058,6 @@ function applyZoomTransform(prefix) {
   zoomLabelsEl.innerHTML = zoomLabelsHtml;
 }
 
-// 繪製 v-t 圖表
 function drawGraphToElement(prefix, points) {
   const container = document.getElementById(`${prefix}-vtContainer`);
   const gridEl = document.getElementById(`${prefix}-vtGrid`);
@@ -1136,7 +1138,6 @@ function drawGraphToElement(prefix, points) {
   applyZoomTransform(prefix);
 }
 
-// 圖表互動與手勢初始化
 function initVtGraphInteractivity(prefix) {
   const container = document.getElementById(`${prefix}-vtContainer`);
   const graph = document.getElementById(`${prefix}-vtGraph`);
@@ -1306,7 +1307,6 @@ function initVtGraphInteractivity(prefix) {
   graph.addEventListener('mouseleave', () => { if (interactiveEl) interactiveEl.style.display = "none"; });
 }
 
-// 計時器
 function updateGlobalTimer() {
   if (isAccelRecording || isGpsRecording) {
     if (recordingStartTime !== null) {
@@ -1337,7 +1337,6 @@ function resetZoomState(prefix) {
   applyZoomTransform(prefix);
 }
 
-// 控制按鈕綁定
 btnZero.addEventListener('click', () => {
   xOffset = filteredX; 
   yOffset = filteredY; 
@@ -1364,7 +1363,7 @@ btnZero.addEventListener('click', () => {
 
   biasDisplayYEl.value = yOffset.toFixed(4) + " m/s²";
   calibStatusEl.className = "status-tag status-active";
-  calibStatusEl.textContent = "已完成校準：靜態偏置與陀螺儀已鎖定";
+  calibStatusEl.textContent = "已完成校準：靜止偏置與陀螺儀已鎖定";
 });
 
 btnToggleAccel.addEventListener('click', async () => {
@@ -1519,7 +1518,7 @@ window.loadRecordGraph = function(id) {
 
 window.exportSingleCsv = function(id) {
   const target = records.find(r => r.id === id);
-  if (!target || !target.vtPoints || target.vtPoints.length === 0) {
+  if (!target || !target.vtPoints || !target.vtPoints.length) {
     alert("該筆紀錄無速度點數據可匯出！");
     return;
   }
@@ -1570,7 +1569,6 @@ function downloadCsvBlob(content, filename) {
 btnPrevPage.addEventListener('click', () => { if (currentPage > 1) { currentPage--; renderP2Records(); } });
 btnNextPage.addEventListener('click', () => { const totalPages = Math.ceil(records.length / rowsPerPage); if (currentPage < totalPages) { currentPage++; renderP2Records(); } });
 
-// 初始化圖表互動與紀錄清單
 initVtGraphInteractivity('p1');
 initVtGraphInteractivity('p2');
 renderP1Records();
