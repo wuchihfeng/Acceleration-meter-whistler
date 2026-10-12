@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>加速度積分 與 GPS 測速器 Whistler 5.0</title>
+  <title>加速度積分 與 GPS 測速器</title>
   <style>
   /* --- 基礎樣式還原 --- */
   * { box-sizing: border-box; }
@@ -410,7 +410,7 @@
       <button id="btn-toggle-gps" class="ctrl-btn btn-gps-idle">錄製 GPS</button>
     </div>
 
-    <!-- 參數與偏置面板 (包含 Whistler 5.0 陀螺儀高階設定) -->
+    <!-- 參數與偏置面板 -->
     <div class="helper-box">
       <button type="button" id="btn-toggle-gyro" class="btn-fill" style="width:100%;margin-bottom:8px;color:#2ecc71;border-color:#2ecc71;">陀螺儀角速度補償：開啟</button>
       <button type="button" id="btn-retry-gyro" class="btn-fill" style="width:100%;margin-bottom:7px;color:#ffc66d;border-color:#a57838;">重新取得感測器權限</button>
@@ -560,7 +560,7 @@
   </div>
 
   <div style="text-align: center; font-size: 0.75rem; color: #555; margin-top: 15px;">
-    Whistler 5.0
+    Whistler
   </div>
 </div>
 
@@ -600,7 +600,7 @@ let lpfAlpha = 0.20;
 let vtPointsData = [];
 let p2ActivePointsData = [];
 
-// --- Whistler 5.0 陀螺儀動態重力補償變數 ---
+// --- Whistler 陀螺儀動態重力補償變數 ---
 const GYRO_G = 9.80665;
 const DEG_TO_RAD = Math.PI / 180;
 let gyroEnabled = true;
@@ -787,7 +787,7 @@ const graphStates = {
   p2: { zoomScale: 1.0, panTranslateX: 0.0, initialPinchDistance: null, initialScale: 1.0, isDragging: false, startDragX: 0, startPanX: 0 }
 };
 
-// localStorage 讀取 (v4.1)
+// localStorage 讀取
 let records = [];
 try {
   const savedRecords = localStorage.getItem('speedometer_records_v41');
@@ -852,7 +852,7 @@ btnBackP1.addEventListener('click', () => {
   renderP1Records();
 });
 
-// 綁定 Whistler 5.0 陀螺儀控制按鈕
+// 綁定陀螺儀控制按鈕
 document.getElementById('btn-request-permission').addEventListener('click', requestGyroPermissionFromGesture);
 document.getElementById('btn-retry-gyro').addEventListener('click', requestGyroPermissionFromGesture);
 
@@ -877,7 +877,7 @@ document.getElementById('btn-toggle-gyro').addEventListener('click', () => {
 
 document.getElementById('btn-request-gps').addEventListener('click', () => { initGpsListener(); });
 
-// 感測器監聽 (融合 Whistler 5.0 陀螺儀動態重力補償)
+// 感測器監聽 (移除負速度計算，將速度下限鎖定於 0.0)
 function initSensorListener() {
   if (gyroMotionListening) return;
   gyroMotionListening = true;
@@ -899,7 +899,6 @@ function initSensorListener() {
     let cleanAccelX = filteredX - xOffset;
     let cleanAccelY = filteredY - yOffset;
 
-    // 若陀螺儀啟用且基準已就緒，扣除動態重力分量
     if (gyroEnabled && gyroReferenceReady) {
       cleanAccelX -= (gyroSmoothedGravity.x - gyroReferenceGravity.x) * axisMultiplier;
       cleanAccelY -= (gyroSmoothedGravity.y - gyroReferenceGravity.y) * axisMultiplier;
@@ -912,7 +911,6 @@ function initSensorListener() {
     accelXValEl.textContent = cleanAccelX.toFixed(3);
     gXValEl.textContent = (cleanAccelX / 9.80665).toFixed(3);
 
-    // 只要有開啟錄製（積分或 GPS 任一）
     if (isAccelRecording || isGpsRecording) {
       if (cleanAccelY > maxAccelVal) { maxAccelVal = cleanAccelY; maxAccelValEl.textContent = maxAccelVal.toFixed(3); }
       if (cleanAccelY < 0) {
@@ -925,17 +923,18 @@ function initSensorListener() {
         if (dt > 0 && dt < 0.5) { 
           if (isAccelRecording) {
             currentSpeed += cleanAccelY * dt;
+            if (currentSpeed < 0) currentSpeed = 0.0; // 鎖定速度下限，去除負速度計算
             totalDisplacement += currentSpeed * dt;
 
             let speedKmh = currentSpeed * 3.6;
-            speedValEl.textContent = Math.abs(speedKmh) < 0.05 ? '0.0' : speedKmh.toFixed(1);
+            speedValEl.textContent = speedKmh < 0.05 ? '0.0' : speedKmh.toFixed(1);
 
-            if (Math.abs(speedKmh) > maxSpeedKmh) {
-              maxSpeedKmh = Math.abs(speedKmh);
+            if (speedKmh > maxSpeedKmh) {
+              maxSpeedKmh = speedKmh;
               maxSpeedValEl.textContent = maxSpeedKmh.toFixed(1);
             }
 
-            if (Math.abs(totalDisplacement) >= 1000) {
+            if (totalDisplacement >= 1000) {
               distValEl.textContent = (totalDisplacement / 1000).toFixed(2);
               distUnitEl.textContent = "km";
             } else {
@@ -1056,28 +1055,7 @@ function applyZoomTransform(prefix) {
   zoomLabelsEl.innerHTML = zoomLabelsHtml;
 }
 
-// 有號速度的圖表範圍計算
-function velocityGraphBounds(prefix, points) {
-  let minV = 0;
-  let maxV = prefix === 'p1' ? Math.max(maxSpeedKmh, maxGpsSpeedKmh) : 0;
-  for (const p of points) {
-    const v = Number.isFinite(p.v) ? p.v : 0;
-    const gv = Number.isFinite(p.gv) ? p.gv : 0;
-    minV = Math.min(minV, v, gv);
-    maxV = Math.max(maxV, v, gv);
-  }
-  if (maxV - minV < 5) {
-    if (minV < 0 && maxV === 0) minV = Math.min(minV, -5);
-    else maxV = minV + 5;
-  }
-  return { minV, maxV };
-}
-
-function velocityGraphY(speed, minV, maxV, paddingBottom, graphHeight) {
-  return paddingBottom - ((speed - minV) / (maxV - minV)) * graphHeight;
-}
-
-// 通用繪製 v-t 圖表
+// 繪製 v-t 圖表
 function drawGraphToElement(prefix, points) {
   const container = document.getElementById(`${prefix}-vtContainer`);
   const gridEl = document.getElementById(`${prefix}-vtGrid`);
@@ -1089,10 +1067,17 @@ function drawGraphToElement(prefix, points) {
 
   const paddingLeft = 45, paddingRight = 20, paddingTop = 25, paddingBottom = 240;
   const graphWidth = 500 - paddingLeft - paddingRight, graphHeight = paddingBottom - paddingTop;
-  
-  const { minV, maxV } = velocityGraphBounds(prefix, points);
+
+  let maxVInPoints = 0;
+  points.forEach(p => { 
+    if (p.v > maxVInPoints) maxVInPoints = p.v; 
+    if (p.gv > maxVInPoints) maxVInPoints = p.gv;
+  });
+
+  const maxV = Math.max(prefix === 'p1' ? Math.max(maxSpeedKmh, maxGpsSpeedKmh) : 0, maxVInPoints, 5); 
   const maxT = points.length > 1 ? Math.max(points[points.length - 1].t, 5) : 10;
-  const numYTicks = 5, vStep = (maxV - minV) / numYTicks, yStepPx = graphHeight / numYTicks;
+
+  const numYTicks = 5, vStep = maxV / numYTicks, yStepPx = graphHeight / numYTicks;
   const numXTicks = 5, xStepPx = graphWidth / numXTicks;
 
   let gridLines = '';
@@ -1103,13 +1088,11 @@ function drawGraphToElement(prefix, points) {
 
   for (let i = 0; i <= numYTicks; i++) {
     const yPx = paddingBottom - (i * yStepPx);
-    const vValue = (minV + i * vStep).toFixed(1);
+    const vValue = (i * vStep).toFixed(1);
     gridLines += `<line x1="${paddingLeft}" y1="${yPx}" x2="${500 - paddingRight}" y2="${yPx}" ${i===0?'class="axis-line"':''} />`;
     fixedLabelsHtml += `<text x="${paddingLeft - 8}" y="${yPx + 4}" text-anchor="end">${vValue}</text>`;
   }
 
-  const zeroY = velocityGraphY(0, minV, maxV, paddingBottom, graphHeight);
-  gridLines += `<line x1="${paddingLeft}" y1="${zeroY}" x2="${500 - paddingRight}" y2="${zeroY}" class="axis-line" />`;
   gridLines += `<line x1="${paddingLeft}" y1="${paddingTop}" x2="${paddingLeft}" y2="${paddingBottom}" class="axis-line" />`;
   for (let i = 1; i <= numXTicks; i++) {
     const xPx = paddingLeft + (i * xStepPx);
@@ -1132,8 +1115,8 @@ function drawGraphToElement(prefix, points) {
 
   const svgPoints = points.map(p => ({
     x: paddingLeft + (p.t / maxT) * graphWidth,
-    y: velocityGraphY(p.v, minV, maxV, paddingBottom, graphHeight),
-    gpsY: velocityGraphY(p.gv || 0, minV, maxV, paddingBottom, graphHeight),
+    y: paddingBottom - (p.v / maxV) * graphHeight,
+    gpsY: paddingBottom - ((p.gv || 0) / maxV) * graphHeight,
     t: p.t, v: p.v, gv: p.gv || 0
   }));
 
@@ -1144,7 +1127,7 @@ function drawGraphToElement(prefix, points) {
   for (let i = 1; i < svgPoints.length; i++) gpsLineD += ` L ${svgPoints[i].x.toFixed(1)} ${svgPoints[i].gpsY.toFixed(1)}`;
 
   const lastP = svgPoints[svgPoints.length - 1], firstP = svgPoints[0];
-  let areaD = `${lineD} L ${lastP.x.toFixed(1)} ${zeroY.toFixed(1)} L ${firstP.x.toFixed(1)} ${zeroY.toFixed(1)} Z`;
+  let areaD = `${lineD} L ${lastP.x.toFixed(1)} ${paddingBottom} L ${firstP.x.toFixed(1)} ${paddingBottom} Z`;
 
   lineEl.setAttribute('d', lineD);
   gpsLineEl.setAttribute('d', gpsLineD);
@@ -1153,7 +1136,7 @@ function drawGraphToElement(prefix, points) {
   applyZoomTransform(prefix);
 }
 
-// 手勢 (Pinch-to-zoom / Pan / Hover) 事件初始化
+// 圖表互動與手勢初始化
 function initVtGraphInteractivity(prefix) {
   const container = document.getElementById(`${prefix}-vtContainer`);
   const graph = document.getElementById(`${prefix}-vtGraph`);
@@ -1248,7 +1231,12 @@ function initVtGraphInteractivity(prefix) {
     const graphWidth = 500 - paddingLeft - paddingRight;
     const graphHeight = paddingBottom - paddingTop;
 
-    const { minV, maxV } = velocityGraphBounds(prefix, points);
+    let maxVInPoints = 0;
+    points.forEach(p => { 
+      if (p.v > maxVInPoints) maxVInPoints = p.v; 
+      if (p.gv > maxVInPoints) maxVInPoints = p.gv;
+    });
+    const maxV = Math.max(prefix === 'p1' ? Math.max(maxSpeedKmh, maxGpsSpeedKmh) : 0, maxVInPoints, 5);
     const maxT = Math.max(points[points.length - 1].t, 5);
 
     let closestPoint = null;
@@ -1264,8 +1252,8 @@ function initVtGraphInteractivity(prefix) {
           v: p.v,
           gv: p.gv || 0,
           x: px,
-          y: velocityGraphY(p.v, minV, maxV, paddingBottom, graphHeight),
-          gpsY: velocityGraphY(p.gv || 0, minV, maxV, paddingBottom, graphHeight)
+          y: paddingBottom - (p.v / maxV) * graphHeight,
+          gpsY: paddingBottom - ((p.gv || 0) / maxV) * graphHeight
         };
       }
     });
@@ -1342,7 +1330,6 @@ async function checkWakeLockState() {
   }
 }
 
-// 重置與歸零
 function resetZoomState(prefix) {
   const st = graphStates[prefix];
   st.zoomScale = 1.0;
@@ -1356,7 +1343,6 @@ btnZero.addEventListener('click', () => {
   yOffset = filteredY; 
   isCalibrated = true;
   
-  // 啟動陀螺儀靜態基準與偏置校準
   calibrateGyroFromRest();
 
   currentSpeed = 0.0; 
@@ -1469,7 +1455,6 @@ function saveRecordsToStorage() {
   try { localStorage.setItem('speedometer_records_v41', JSON.stringify(records)); } catch (e) {}
 }
 
-// 渲染第一頁簡便表格 (前 5 筆)
 function renderP1Records() {
   const top5 = records.slice(0, 5);
   if (top5.length === 0) {
@@ -1488,7 +1473,6 @@ function renderP1Records() {
   `).join('');
 }
 
-// 渲染第二頁全面性表格
 function renderP2Records() {
   if (records.length === 0) {
     p2RecordsTbody.innerHTML = `<tr><td colspan="8" class="placeholder-text">尚無觀測紀錄</td></tr>`;
@@ -1594,4 +1578,4 @@ updateGyroStatus(true);
 </script>
 
 </body>
-</html>
+</html>2
