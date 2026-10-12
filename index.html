@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>加速度積分 與 GPS 測速器 Longhorn 5.3</title>
+  <title>加速度積分 與 GPS 測速器 Longhorn 5.4</title>
   <style>
   /* --- 基礎樣式還原 --- */
   * { box-sizing: border-box; }
@@ -383,10 +383,10 @@
         <span id="accel-val" style="color: #ff9800; font-weight: bold;">0.000</span> m/s² 
       </div>
 
-      <!-- Longhorn 5.3 新增：重力補償分量即時顯示 -->
+      <!-- Longhorn 5.4 軸向鎖定：重力補償分量即時顯示 -->
       <div class="info" style="color: #3498db; border-top: 1px dashed #222; margin-top: 6px; padding-top: 6px;">
-        <span class="axis-title">重力補償分量 (Delta)：</span>
-        X: <span id="gyro-delta-x">0.000</span> | Y: <span id="gyro-delta-y">0.000</span> m/s²
+        <span class="axis-title">重力補償分量 (Delta Y)：</span>
+        <span id="gyro-delta-y">0.000</span> m/s²
       </div>
 
       <div class="info" style="font-size: 0.72rem; color: #666; margin-top: 8px; border-top: 1px dashed #333; padding-top: 6px;">
@@ -408,7 +408,7 @@
     </div>
 
     <div class="helper-box">
-      <button type="button" id="btn-toggle-gyro" class="btn-fill" style="width:100%;margin-bottom:8px;color:#2ecc71;border-color:#2ecc71;">陀螺儀角速度補償：開啟</button>
+      <button type="button" id="btn-toggle-gyro" class="btn-fill" style="width:100%;margin-bottom:8px;color:#2ecc71;border-color:#2ecc71;">陀螺儀重力補償：開啟</button>
       <button type="button" id="btn-retry-gyro" class="btn-fill" style="width:100%;margin-bottom:7px;color:#ffc66d;border-color:#a57838;">重新取得感測器權限</button>
       
       <label for="gyro-axis-mode" style="font-size:0.75rem;color:#aaa;display:block;margin-bottom:5px;">陀螺儀角速度軸序</label>
@@ -550,7 +550,7 @@
   </div>
 
   <div style="text-align: center; font-size: 0.75rem; color: #555; margin-top: 15px;">
-    Longhorn 5.3
+    Longhorn 5.4
   </div>
 </div>
 
@@ -587,7 +587,7 @@ let lpfAlpha = 0.20;
 let vtPointsData = [];
 let p2ActivePointsData = [];
 
-// --- 5.2 引擎怠速震動過濾變數 ---
+// --- 5.4 引擎怠速震動過濾與車速閘道變數 ---
 let restDetectionWindow = [];
 const IDLE_RMS_THRESHOLD = 0.045; 
 const TRUE_REST_TIME_REQUIRED = 1200; 
@@ -626,7 +626,7 @@ function evaluateEngineIdleRest(currentAccelY, currentGyroRate) {
   return isSteadyMean && isValidIdleRms;
 }
 
-// --- 陀螺儀動態重力補償變數 ---
+// --- 3.D 陀螺儀動態重力補償 (專注於 Y 軸斜坡分量扣除) ---
 const GYRO_G = 9.80665;
 const DEG_TO_RAD = Math.PI / 180;
 let gyroEnabled = true;
@@ -682,7 +682,7 @@ function updateGyroStatus(force = false) {
   else if (gyroInterrupted) label = '陀螺儀中斷，請重新歸零';
   else if (!gyroRateReady) label = '等待陀螺儀資料...';
   else if (!gyroReferenceReady) label = '已就緒，請靜止按「矯正歸零」';
-  else { label = '3D 陀螺儀與重力補償中 (5.3)'; active = true; }
+  else { label = 'Y 軸實體對齊與重力補償中 (5.4)'; active = true; }
   el.textContent = label;
   el.className = `status-tag ${active ? 'status-active' : 'status-inactive'}`;
 }
@@ -817,7 +817,6 @@ const gpsDistValEl = document.getElementById('gps-dist-val');
 const gpsDistUnitEl = document.getElementById('gps-dist-unit');
 const accelValEl = document.getElementById('accel-val');
 const accelXValEl = document.getElementById('accel-x-val');
-const gyroDeltaXEl = document.getElementById('gyro-delta-x');
 const gyroDeltaYEl = document.getElementById('gyro-delta-y');
 
 const timerValEl = document.getElementById('timer-val');
@@ -873,7 +872,7 @@ document.getElementById('gyro-axis-mode').addEventListener('change', (event) => 
 document.getElementById('btn-toggle-gyro').addEventListener('click', () => {
   gyroEnabled = !gyroEnabled;
   const button = document.getElementById('btn-toggle-gyro');
-  button.textContent = `陀螺儀角速度補償：${gyroEnabled ? '開啟' : '關閉'}`;
+  button.textContent = `陀螺儀重力補償：${gyroEnabled ? '開啟' : '關閉'}`;
   button.style.color = gyroEnabled ? '#2ecc71' : '#999';
   button.style.borderColor = gyroEnabled ? '#2ecc71' : '#777';
   updateGyroStatus(true);
@@ -902,24 +901,20 @@ function initSensorListener() {
     let cleanAccelX = filteredX - xOffset;
     let cleanAccelY = filteredY - yOffset;
 
-    // 計算重力補償分量 (Delta)
-    let deltaX = 0.0;
+    // 計算 Y 軸重力補償分量 (Delta Y)
     let deltaY = 0.0;
     if (gyroEnabled && gyroReferenceReady) {
-      deltaX = (gyroSmoothedGravity.x - gyroReferenceGravity.x) * axisMultiplier;
       deltaY = (gyroSmoothedGravity.y - gyroReferenceGravity.y) * axisMultiplier;
-      cleanAccelX -= deltaX;
       cleanAccelY -= deltaY;
     }
 
     // 即時更新畫面上的重力補償分量數值
-    gyroDeltaXEl.textContent = deltaX.toFixed(3);
     gyroDeltaYEl.textContent = deltaY.toFixed(3);
 
-    // 怠速防護偵測
-    if (evaluateEngineIdleRest(cleanAccelY, omega)) {
+    // Longhorn 5.4 嚴格速限防護：當車速大於 1.0 m/s (3.6 km/h) 時，絕對禁止怠速歸零，防止高速爬坡被強制歸零
+    if (currentSpeed < 1.0 && evaluateEngineIdleRest(cleanAccelY, omega)) {
       cleanAccelY = 0.0;
-      if (currentSpeed < 0.3) currentSpeed = 0.0;
+      currentSpeed = 0.0;
     }
 
     if (Math.abs(cleanAccelY) < 0.008) cleanAccelY = 0.0;
@@ -1374,7 +1369,7 @@ btnZero.addEventListener('click', () => {
 
   biasDisplayYEl.value = yOffset.toFixed(4) + " m/s²";
   calibStatusEl.className = "status-tag status-active";
-  calibStatusEl.textContent = "已完成校準：靜止偏置與陀螺儀已鎖定";
+  calibStatusEl.textContent = "已完成校準：Y軸基準與重力補償已鎖定";
 });
 
 btnToggleAccel.addEventListener('click', async () => {
@@ -1450,7 +1445,7 @@ function addRecord(maxSpeed, maxGpsSpeed, displacement, gpsDisplacement, duratio
   records.unshift({
     id: Date.now(), time: timeStr,
     maxSpeed: hasAccelData ? maxSpeed.toFixed(1) + " km/h" : "N/A",
-    maxGpsSpeed: hasGpsData ? maxGpsSpeed.toFixed(1) + " km/h" : "N/A",
+    maxGpsSpeed: hasGpsSpeed ? maxGpsSpeed.toFixed(1) + " km/h" : "N/A",
     disp: dispStr, gpsDisp: gpsDispStr,
     duration: duration.toFixed(1) + " s",
     vtPoints: vtPoints || []
