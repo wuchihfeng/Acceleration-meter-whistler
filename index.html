@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>加速度積分 與 GPS 測速器 Longhorn 5.2</title>
+  <title>加速度積分 與 GPS 測速器 Longhorn 5.3</title>
   <style>
   /* --- 基礎樣式還原 --- */
   * { box-sizing: border-box; }
@@ -376,13 +376,17 @@
       <div class="info">
         <span class="axis-title">X-axis (左右)：</span>
         <span id="accel-x-val" style="color: #2ecc71; font-weight: bold;">0.000</span> m/s² 
-        (<span id="g-x-val">0.000</span> G)
       </div>
       
       <div class="info">
         <span class="axis-title">Y-axis (淨推進)：</span>
         <span id="accel-val" style="color: #ff9800; font-weight: bold;">0.000</span> m/s² 
-        (<span id="g-val">0.000</span> G)
+      </div>
+
+      <!-- Longhorn 5.3 新增：重力補償分量即時顯示 -->
+      <div class="info" style="color: #3498db; border-top: 1px dashed #222; margin-top: 6px; padding-top: 6px;">
+        <span class="axis-title">重力補償分量 (Delta)：</span>
+        X: <span id="gyro-delta-x">0.000</span> | Y: <span id="gyro-delta-y">0.000</span> m/s²
       </div>
 
       <div class="info" style="font-size: 0.72rem; color: #666; margin-top: 8px; border-top: 1px dashed #333; padding-top: 6px;">
@@ -546,7 +550,7 @@
   </div>
 
   <div style="text-align: center; font-size: 0.75rem; color: #555; margin-top: 15px;">
-    Longhorn 5.2
+    Longhorn 5.3 (Gravity-Delta View)
   </div>
 </div>
 
@@ -583,7 +587,7 @@ let lpfAlpha = 0.20;
 let vtPointsData = [];
 let p2ActivePointsData = [];
 
-// --- Longhorn 5.2 引擎怠速與震動容忍過濾變數 ---
+// --- 5.2 引擎怠速震動過濾變數 ---
 let restDetectionWindow = [];
 const IDLE_RMS_THRESHOLD = 0.045; 
 const TRUE_REST_TIME_REQUIRED = 1200; 
@@ -622,7 +626,7 @@ function evaluateEngineIdleRest(currentAccelY, currentGyroRate) {
   return isSteadyMean && isValidIdleRms;
 }
 
-// --- Whistler 陀螺儀動態重力補償變數 ---
+// --- 陀螺儀動態重力補償變數 ---
 const GYRO_G = 9.80665;
 const DEG_TO_RAD = Math.PI / 180;
 let gyroEnabled = true;
@@ -678,7 +682,7 @@ function updateGyroStatus(force = false) {
   else if (gyroInterrupted) label = '陀螺儀中斷，請重新歸零';
   else if (!gyroRateReady) label = '等待陀螺儀資料...';
   else if (!gyroReferenceReady) label = '已就緒，請靜止按「矯正歸零」';
-  else { label = '3D 陀螺儀補償與怠速防護中'; active = true; }
+  else { label = '3D 陀螺儀與重力補償中 (5.3)'; active = true; }
   el.textContent = label;
   el.className = `status-tag ${active ? 'status-active' : 'status-inactive'}`;
 }
@@ -812,9 +816,9 @@ const distUnitEl = document.getElementById('dist-unit');
 const gpsDistValEl = document.getElementById('gps-dist-val');
 const gpsDistUnitEl = document.getElementById('gps-dist-unit');
 const accelValEl = document.getElementById('accel-val');
-const gValEl = document.getElementById('g-val');
 const accelXValEl = document.getElementById('accel-x-val');
-const gXValEl = document.getElementById('g-x-val');
+const gyroDeltaXEl = document.getElementById('gyro-delta-x');
+const gyroDeltaYEl = document.getElementById('gyro-delta-y');
 
 const timerValEl = document.getElementById('timer-val');
 const maxSpeedValEl = document.getElementById('max-speed-val');
@@ -898,23 +902,30 @@ function initSensorListener() {
     let cleanAccelX = filteredX - xOffset;
     let cleanAccelY = filteredY - yOffset;
 
+    // 計算重力補償分量 (Delta)
+    let deltaX = 0.0;
+    let deltaY = 0.0;
     if (gyroEnabled && gyroReferenceReady) {
-      cleanAccelX -= (gyroSmoothedGravity.x - gyroReferenceGravity.x) * axisMultiplier;
-      cleanAccelY -= (gyroSmoothedGravity.y - gyroReferenceGravity.y) * axisMultiplier;
+      deltaX = (gyroSmoothedGravity.x - gyroReferenceGravity.x) * axisMultiplier;
+      deltaY = (gyroSmoothedGravity.y - gyroReferenceGravity.y) * axisMultiplier;
+      cleanAccelX -= deltaX;
+      cleanAccelY -= deltaY;
     }
 
-    // --- 導入 Longhorn 5.2 怠速防護：若判定為怠速震動，強制歸零雜訊 ---
+    // 即時更新畫面上的重力補償分量數值
+    gyroDeltaXEl.textContent = deltaX.toFixed(3);
+    gyroDeltaYEl.textContent = deltaY.toFixed(3);
+
+    // 怠速防護偵測
     if (evaluateEngineIdleRest(cleanAccelY, omega)) {
       cleanAccelY = 0.0;
-      if (currentSpeed < 0.3) currentSpeed = 0.0; // 靜止時漸進把速度歸零
+      if (currentSpeed < 0.3) currentSpeed = 0.0;
     }
 
     if (Math.abs(cleanAccelY) < 0.008) cleanAccelY = 0.0;
 
     accelValEl.textContent = cleanAccelY.toFixed(3);
-    gValEl.textContent = (cleanAccelY / 9.80665).toFixed(3);
     accelXValEl.textContent = cleanAccelX.toFixed(3);
-    gXValEl.textContent = (cleanAccelX / 9.80665).toFixed(3);
 
     if (isAccelRecording || isGpsRecording) {
       if (cleanAccelY > maxAccelVal) { maxAccelVal = cleanAccelY; maxAccelValEl.textContent = maxAccelVal.toFixed(3); }
