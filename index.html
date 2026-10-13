@@ -587,7 +587,7 @@ let lpfAlpha = 0.20;
 let vtPointsData = [];
 let p2ActivePointsData = [];
 
-// --- 5.4/5.5 引擎怠速震動過濾與車速閘道變數 ---
+// --- 引擎怠速震動過濾與車速閘道變數 ---
 let restDetectionWindow = [];
 const IDLE_RMS_THRESHOLD = 0.045; 
 const TRUE_REST_TIME_REQUIRED = 1200; 
@@ -743,11 +743,12 @@ function stepGyro(rate, now, smoothingAlpha, measuredAccel) {
       // 1. 陀螺儀預測旋轉
       gyroGravity = rotateGravityByGyro(gyroGravity, corrected, dt);
 
-      // 2. 5.5 核心：加入互補回授 (Complementary Feedback)
-      // 當車速較慢或加速度穩定時，以極小權重（0.01）將加速度計的絕對重力方向拉回校正矩陣，防止長期累積飄移
+      // 2. 5.5 修正：加入動態防護鎖，防止車輛前進加速度被當成重力吞掉
       const alphaFeedback = 0.01;
       const accMag = Math.hypot(measuredAccel.x, measuredAccel.y, measuredAccel.z);
-      if (accMag >= 8.5 && accMag <= 10.8) { // 確保當前合力接近 1G 時才進行拉回
+      const forwardAccelCheck = Math.abs(measuredAccel.y - yOffset); // 檢查 Y 軸是否有顯著推進力
+      
+      if (accMag >= 8.5 && accMag <= 10.8 && forwardAccelCheck < 0.03) { 
         gyroGravity.x = (1 - alphaFeedback) * gyroGravity.x + alphaFeedback * measuredAccel.x;
         gyroGravity.y = (1 - alphaFeedback) * gyroGravity.y + alphaFeedback * measuredAccel.y;
         gyroGravity.z = (1 - alphaFeedback) * gyroGravity.z + alphaFeedback * measuredAccel.z;
@@ -1597,4 +1598,4 @@ updateGyroStatus(true);
 </script>
 
 </body>
-</html>
+</html>a
