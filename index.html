@@ -815,9 +815,17 @@ const graphStates = {
 
 let records = [];
 try {
-  const savedRecords = localStorage.getItem('speedometer_records_v57');
-  if (savedRecords) records = JSON.parse(savedRecords);
-} catch (e) {}
+  // 先讀取目前版本；若沒有資料，兼容舊版紀錄鍵，避免升級後歷史紀錄消失。
+  const savedRecords = localStorage.getItem('speedometer_records_v57') ||
+    localStorage.getItem('longhorn_records_v55') ||
+    localStorage.getItem('longhorn_records_v53');
+  if (savedRecords) {
+    const parsed = JSON.parse(savedRecords);
+    if (Array.isArray(parsed)) records = parsed;
+  }
+} catch (e) {
+  console.error('讀取歷史紀錄失敗：', e);
+}
 
 let currentPage = 1;
 const rowsPerPage = 5;
@@ -1441,7 +1449,9 @@ btnToggleAccel.addEventListener('click', async () => {
     lastAccelTimestamp = performance.now(); startRecordingTimer(); await requestWakeLock();
   } else {
     btnToggleAccel.textContent = "錄製積分"; btnToggleAccel.className = "ctrl-btn btn-gmeter-idle";
-    saveCurrentRecord(true, isGpsRecording); await checkWakeLockState();
+    // 若 GPS 仍在錄製，等最後一個模式停止時再儲存，避免同一段資料重複新增。
+    if (!isGpsRecording) saveCurrentRecord(true, false);
+    await checkWakeLockState();
   }
 });
 
@@ -1453,33 +1463,49 @@ btnToggleGps.addEventListener('click', async () => {
     startRecordingTimer(); await requestWakeLock();
   } else {
     btnToggleGps.textContent = "錄製 GPS"; btnToggleGps.className = "ctrl-btn btn-gps-idle";
-    saveCurrentRecord(isAccelRecording, true); await checkWakeLockState();
+    if (!isAccelRecording) saveCurrentRecord(false, true);
+    await checkWakeLockState();
   }
 });
 
 function saveCurrentRecord(hasAccel, hasGps) {
-  if (totalRecordedTime > 0.2) {
-    addRecord(maxSpeedKmh, maxGpsSpeedKmh, totalDisplacement, totalGpsDisplacement, totalRecordedTime, hasAccel || maxSpeedKmh > 0, hasGps || maxGpsSpeedKmh > 0, [...vtPointsData]);
+  if (totalRecordedTime <= 0.2) return;
+  const accelData = !!hasAccel || maxSpeedKmh > 0 || totalDisplacement > 0;
+  const gpsData = !!hasGps || maxGpsSpeedKmh > 0 || totalGpsDisplacement > 0;
+  try {
+    addRecord(maxSpeedKmh, maxGpsSpeedKmh, totalDisplacement, totalGpsDisplacement,
+      totalRecordedTime, accelData, gpsData, [...vtPointsData]);
+  } catch (e) {
+    console.error('新增觀測紀錄失敗：', e);
+    alert('新增觀測紀錄失敗：' + (e && e.message ? e.message : e));
   }
 }
 
 btnReset.addEventListener('click', async () => {
-  if (isAccelRecording || isGpsRecording) saveCurrentRecord(isAccelRecording, isGpsRecording);
+  // 重置時先嘗試儲存，但儲存失敗不能阻止重置本身。
+  try {
+    if (isAccelRecording || isGpsRecording) saveCurrentRecord(isAccelRecording, isGpsRecording);
+  } catch (e) {
+    console.error('重置前儲存紀錄失敗：', e);
+  }
   isAccelRecording = false; isGpsRecording = false;
   btnToggleAccel.textContent = "錄製積分"; btnToggleAccel.className = "ctrl-btn btn-gmeter-idle";
   btnToggleGps.textContent = "錄製 GPS"; btnToggleGps.className = "ctrl-btn btn-gps-idle";
-  await releaseWakeLock();
   if (timerInterval !== null) { clearInterval(timerInterval); timerInterval = null; }
+  recordingStartTime = null;
+  try { await releaseWakeLock(); } catch (e) { console.warn('釋放螢幕喚醒鎖失敗：', e); }
 
   currentSpeed = 0.0; maxSpeedKmh = 0.0; maxGpsSpeedKmh = 0.0;
   maxAccelVal = 0.0; maxDecelVal = 0.0; totalDisplacement = 0.0; totalGpsDisplacement = 0.0;
-  totalRecordedTime = 0.0; lastAccelTimestamp = null; recordingStartTime = null; vtPointsData = [];
+  totalRecordedTime = 0.0; lastAccelTimestamp = null; vtPointsData = [];
 
   resetZoomState('p1');
   document.getElementById('p1-vtContainer').classList.remove('has-data');
   document.getElementById('p1-vtLine').setAttribute('d', '');
   document.getElementById('p1-vtGpsLine').setAttribute('d', '');
   document.getElementById('p1-vtArea').setAttribute('d', '');
+  const interactive = document.getElementById('p1-vtInteractive');
+  if (interactive) interactive.style.display = 'none';
 
   speedValEl.textContent = "0.0"; gpsSpeedValEl.textContent = "0.0";
   maxSpeedValEl.textContent = "0.0"; gpsMaxSpeedValEl.textContent = "0.0";
@@ -1504,7 +1530,7 @@ function addRecord(maxSpeed, maxGpsSpeed, displacement, gpsDisplacement, duratio
   records.unshift({
     id: Date.now(), time: timeStr,
     maxSpeed: hasAccelData ? maxSpeed.toFixed(1) + " km/h" : "N/A",
-    maxGpsSpeed: hasGpsSpeed ? maxGpsSpeed.toFixed(1) + " km/h" : "N/A",
+    maxGpsSpeed: hasGpsData ? maxGpsSpeed.toFixed(1) + " km/h" : "N/A",
     disp: dispStr, gpsDisp: gpsDispStr,
     duration: duration.toFixed(1) + " s",
     vtPoints: vtPoints || []
@@ -1516,7 +1542,14 @@ function addRecord(maxSpeed, maxGpsSpeed, displacement, gpsDisplacement, duratio
 }
 
 function saveRecordsToStorage() {
-  try { localStorage.setItem('speedometer_records_v57', JSON.stringify(records)); } catch (e) {}
+  try {
+    localStorage.setItem('speedometer_records_v57', JSON.stringify(records));
+    return true;
+  } catch (e) {
+    console.error('儲存歷史紀錄失敗：', e);
+    alert('紀錄已更新在目前畫面，但無法寫入本機儲存空間。請確認瀏覽器允許此頁面儲存資料。');
+    return false;
+  }
 }
 
 function renderP1Records() {
