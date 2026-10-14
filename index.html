@@ -352,7 +352,7 @@
 
     <div style="text-align: center; margin-bottom: 10px; display: flex; flex-direction: column; gap: 4px; align-items: center;">
       <span id="calib-status" class="status-tag status-inactive">未校準 (靜止時按矯正歸零)</span>
-      <span id="gyro-status" class="status-tag status-active">模式狀態：鐵道模式 (SINS 啟動)</span>
+      <span id="gyro-status" class="status-tag status-active">模式狀態：鐵道模式</span>
       <span id="gps-status" class="status-tag status-inactive">GPS 定位：未啟動</span>
     </div>
 
@@ -686,7 +686,7 @@ function updateGyroStatus(force = false) {
   if (!el) return;
 
   if (navMode === 'normal') {
-    el.textContent = '模式狀態：普通模式 (4.1 靜止偏置)';
+    el.textContent = '模式狀態：普通模式';
     el.className = 'status-tag status-active';
     return;
   }
@@ -698,7 +698,7 @@ function updateGyroStatus(force = false) {
   else if (gyroInterrupted) label = '陀螺儀中斷，請重新歸零';
   else if (!gyroRateReady) label = '等待陀螺儀資料...';
   else if (!gyroReferenceReady) label = '已就緒，請靜止按「矯正歸零」';
-  else { label = '鐵道模式：Y軸實體對齊與SINS慣導中 (5.7)'; active = true; }
+  else { label = '鐵道模式：慣性導航中'; active = true; }
   el.textContent = label;
   el.className = `status-tag ${active ? 'status-active' : 'status-inactive'}`;
 }
@@ -895,7 +895,7 @@ function setNavMode(mode) {
 
     railwaySettingsPanel.style.display = 'block';
     railwayDeltaContainer.style.display = 'block';
-    calibStatusEl.textContent = "未校準 (鐵道模式 SINS)";
+    calibStatusEl.textContent = "未校準 (鐵道模式)";
   }
   updateGyroStatus(true);
 }
