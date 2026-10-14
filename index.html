@@ -579,7 +579,6 @@ async function releaseWakeLock() {
   }
 }
 
-// 導航模式變數 ('railway' = 鐵道模式, 'normal' = 普通模式)
 let navMode = 'railway';
 
 let isAccelRecording = false, isGpsRecording = false, isCalibrated = false;
@@ -598,7 +597,6 @@ let lpfAlpha = 0.20;
 let vtPointsData = [];
 let p2ActivePointsData = [];
 
-// --- 引擎怠速震動過濾與車速閘道變數 ---
 let restDetectionWindow = [];
 const IDLE_RMS_THRESHOLD = 0.045; 
 const TRUE_REST_TIME_REQUIRED = 1200; 
@@ -637,7 +635,6 @@ function evaluateEngineIdleRest(currentAccelY, currentGyroRate) {
   return isSteadyMean && isValidIdleRms;
 }
 
-// --- 鐵道模式 (5.5) 專屬：3D 陀螺儀重力補償變數 ---
 const GYRO_G = 9.80665;
 const DEG_TO_RAD = Math.PI / 180;
 let gyroEnabled = true;
@@ -698,7 +695,7 @@ function updateGyroStatus(force = false) {
   else if (gyroInterrupted) label = '陀螺儀中斷，請重新歸零';
   else if (!gyroRateReady) label = '等待陀螺儀資料...';
   else if (!gyroReferenceReady) label = '已就緒，請靜止按「矯正歸零」';
-  else { label = '鐵道模式：慣性導航中'; active = true; }
+  else { label = '鐵道模式：導航運行中'; active = true; }
   el.textContent = label;
   el.className = `status-tag ${active ? 'status-active' : 'status-inactive'}`;
 }
@@ -869,7 +866,6 @@ const btnPrevPage = document.getElementById('btn-prev-page');
 const btnNextPage = document.getElementById('btn-next-page');
 const pageInfoEl = document.getElementById('page-info');
 
-// 模式按鈕切換邏輯
 function setNavMode(mode) {
   navMode = mode;
   if (navMode === 'normal') {
@@ -903,7 +899,6 @@ function setNavMode(mode) {
 btnModeNormal.addEventListener('click', () => setNavMode('normal'));
 btnModeRailway.addEventListener('click', () => setNavMode('railway'));
 
-// 初始預設鐵道模式樣式
 setNavMode('railway');
 
 btnGoPage2.addEventListener('click', () => {
@@ -1433,7 +1428,7 @@ btnZero.addEventListener('click', () => {
 
   biasDisplayYEl.value = yOffset.toFixed(4) + " m/s²";
   calibStatusEl.className = "status-tag status-active";
-  calibStatusEl.textContent = navMode === 'railway' ? "已完成校準：鐵道SINS基準已鎖定" : "已完成校準：普通模式偏置已鎖定";
+  calibStatusEl.textContent = navMode === 'railway' ? "已完成校準：鐵道模式基準已鎖定" : "已完成校準：普通模式偏置已鎖定";
 });
 
 btnToggleAccel.addEventListener('click', async () => {
