@@ -156,7 +156,7 @@
     color: #ff9800;
     font-weight: bold;
     display: block;
-    margin-bottom: 12px;
+    margin-bottom: 8px;
     font-size: 0.85rem;
   }
 
@@ -340,13 +340,19 @@
     <h1>加速度積分 與 GPS 測速器</h1>
 
     <div id="permission-btn-container" style="margin-bottom: 12px; display: flex; gap: 8px;">
-      <button id="btn-request-permission" class="btn-fill">啟動感測器</button>
-      <button id="btn-request-gps" class="btn-fill" style="color: #00bcd4; border-color: #00bcd4;">開啟 GPS</button>
+      <button id="btn-request-permission" class="btn-fill">啟動動態感測器</button>
+      <button id="btn-request-gps" class="btn-fill" style="color: #00bcd4; border-color: #00bcd4;">開啟 GPS 定位</button>
+    </div>
+
+    <!-- 依照截圖排版：一般模式與鐵道模式並排按鈕列 -->
+    <div style="margin-bottom: 12px; display: flex; gap: 8px;">
+      <button id="btn-mode-normal" class="ctrl-btn" style="flex: 1; padding: 12px; border-radius: 10px; font-size: 0.85rem;">一般模式</button>
+      <button id="btn-mode-railway" class="ctrl-btn" style="flex: 1; padding: 12px; border-radius: 10px; font-size: 0.85rem;">鐵道模式</button>
     </div>
 
     <div style="text-align: center; margin-bottom: 10px; display: flex; flex-direction: column; gap: 4px; align-items: center;">
       <span id="calib-status" class="status-tag status-inactive">未校準 (靜止時按矯正歸零)</span>
-      <span id="gyro-status" class="status-tag status-inactive">陀螺儀座標系：等待啟動</span>
+      <span id="gyro-status" class="status-tag status-active">模式狀態：鐵道模式 (SINS 啟動)</span>
       <span id="gps-status" class="status-tag status-inactive">GPS 定位：未啟動</span>
     </div>
 
@@ -383,6 +389,11 @@
         <span id="accel-val" style="color: #ff9800; font-weight: bold;">0.000</span> m/s² 
       </div>
 
+      <div id="railway-delta-container" class="info" style="color: #3498db; border-top: 1px dashed #222; margin-top: 6px; padding-top: 6px;">
+        <span class="axis-title">重力補償分量 (Delta Y)：</span>
+        <span id="gyro-delta-y">0.000</span> m/s²
+      </div>
+
       <div class="info" style="font-size: 0.72rem; color: #666; margin-top: 8px; border-top: 1px dashed #333; padding-top: 6px;">
         測量時長：<span id="timer-val">0.0</span> s 
         <div class="info" style="font-size: 0.72rem; color: #666; margin-top: 6px;">
@@ -402,13 +413,21 @@
     </div>
 
     <div class="helper-box">
-      <label for="app-mode-select" style="font-size:0.75rem;color:#ff9800;font-weight:bold;display:block;margin-bottom:5px;">運行模式選擇</label>
-      <select id="app-mode-select" style="width:100%;margin-bottom:12px;background:#1e1e1e;color:#fff;border:1px solid #ff9800;border-radius:7px;padding:8px;font-size:0.8rem;">
-        <option value="railway">鐵道模式</option>
-        <option value="normal">普通模式</option>
-      </select>
+      <!-- 鐵道模式專屬設定區塊 -->
+      <div id="railway-settings-panel">
+        <button type="button" id="btn-toggle-gyro" class="btn-fill" style="width:100%;margin-bottom:8px;color:#2ecc71;border-color:#2ecc71;">互補重力補償：開啟</button>
+        <button type="button" id="btn-retry-gyro" class="btn-fill" style="width:100%;margin-bottom:7px;color:#ffc66d;border-color:#a57838;">重新取得感測器權限</button>
+        
+        <label for="gyro-axis-mode" style="font-size:0.75rem;color:#aaa;display:block;margin-bottom:5px;">陀螺儀角速度軸序</label>
+        <select id="gyro-axis-mode" style="width:100%;margin-bottom:10px;background:#252525;color:#ddd;border:1px solid #444;border-radius:7px;padding:8px;font-size:0.8rem;">
+          <option value="legacy">舊版軸序：β=X、γ=Y、α=Z</option>
+          <option value="legacy-reverse">舊版軸序（角速度反向）</option>
+          <option value="standard">W3C 軸序：α=X、β=Y、γ=Z</option>
+          <option value="standard-reverse">W3C 軸序（角速度反向）</option>
+        </select>
+      </div>
 
-      <span class="helper-label" style="margin-top: 5px;">平滑低通濾波設定</span>
+      <span class="helper-label" style="margin-top: 4px;">平滑低通濾波設定</span>
       <label for="lpf-slider" style="font-size: 0.78rem; color: #aaa;">低通濾波強度 (Smoothing Alpha: <span id="lpf-val">0.20</span>)</label>
       <div class="helper-inputs">
         <input type="range" id="lpf-slider" min="0.01" max="0.30" step="0.01" value="0.20">
@@ -560,10 +579,12 @@ async function releaseWakeLock() {
   }
 }
 
+// 導航模式變數 ('railway' = 鐵道模式, 'normal' = 普通模式)
+let navMode = 'railway';
+
 let isAccelRecording = false, isGpsRecording = false, isCalibrated = false;
-let currentMode = 'railway'; // 'railway' 或 'normal'
 let xOffset = 0.0, yOffset = 0.0;
-let currentRawX = 0.0, currentRawY = 0.0, filteredX = 0.0, filteredY = 0.0, filteredZ = 0.0;
+let currentRawX = 0.0, currentRawY = 0.0, filteredX = 0.0, filteredY = 0.0;
 let currentSpeed = 0.0, maxSpeedKmh = 0.0, totalDisplacement = 0.0;
 let maxAccelVal = 0.0, maxDecelVal = 0.0;
 
@@ -577,23 +598,70 @@ let lpfAlpha = 0.20;
 let vtPointsData = [];
 let p2ActivePointsData = [];
 
-// --- 5.7 純陀螺儀驅動的座標系與重力分離變數 ---
+// --- 引擎怠速震動過濾與車速閘道變數 ---
+let restDetectionWindow = [];
+const IDLE_RMS_THRESHOLD = 0.045; 
+const TRUE_REST_TIME_REQUIRED = 1200; 
+
+function evaluateEngineIdleRest(currentAccelY, currentGyroRate) {
+  const now = performance.now();
+  restDetectionWindow.push({
+    t: now,
+    accelY: currentAccelY,
+    gyro: Math.hypot(currentGyroRate.x, currentGyroRate.y, currentGyroRate.z)
+  });
+
+  while (restDetectionWindow.length && restDetectionWindow[0].t < now - TRUE_REST_TIME_REQUIRED) {
+    restDetectionWindow.shift();
+  }
+
+  if (restDetectionWindow.length < 15) return false;
+
+  let sumAccel = 0, sumGyro = 0;
+  restDetectionWindow.forEach(p => {
+    sumAccel += p.accelY;
+    sumGyro += p.gyro;
+  });
+  let meanAccel = sumAccel / restDetectionWindow.length;
+  let meanGyro = sumGyro / restDetectionWindow.length;
+
+  let variance = 0;
+  restDetectionWindow.forEach(p => {
+    variance += Math.pow(p.accelY - meanAccel, 2);
+  });
+  let rms = Math.sqrt(variance / restDetectionWindow.length);
+
+  const isSteadyMean = Math.abs(meanAccel) < 0.02 && Math.abs(meanGyro) < 0.08 * (Math.PI / 180);
+  const isValidIdleRms = rms < IDLE_RMS_THRESHOLD;
+
+  return isSteadyMean && isValidIdleRms;
+}
+
+// --- 鐵道模式 (5.5) 專屬：3D 陀螺儀重力補償變數 ---
+const GYRO_G = 9.80665;
 const DEG_TO_RAD = Math.PI / 180;
-let gyroMotionListening = false;
+let gyroEnabled = true;
+let gyroRateReady = false;
 let gyroReferenceReady = false;
+let gyroInterrupted = false;
+let gyroPermissionState = 'idle';
+let gyroMotionListening = false;
+let gyroAxisMode = isIOS ? 'legacy' : 'standard';
 let gyroLastTimestamp = null;
-let gyroReferenceGravity = { x: 0, y: 0, z: 9.80665 };
-let gyroGravity = { x: 0, y: 0, z: 9.80665 };
+let gyroLastRateTimestamp = null;
+let gyroReferenceGravity = { x: 0, y: 0, z: GYRO_G };
+let gyroGravity = { x: 0, y: 0, z: GYRO_G };
+let gyroSmoothedGravity = { x: 0, y: 0, z: GYRO_G };
 let gyroBias = { x: 0, y: 0, z: 0 };
 let gyroRateHistory = [];
+let filteredZ = 0.0;
+let gyroStatusLastPaint = 0;
 
 function gyroRateFromEvent(rate) {
   if (!rate || ![rate.alpha, rate.beta, rate.gamma].every(Number.isFinite)) return null;
-  return { 
-    x: rate.beta * DEG_TO_RAD * axisMultiplier, 
-    y: rate.gamma * DEG_TO_RAD * axisMultiplier, 
-    z: rate.alpha * DEG_TO_RAD 
-  };
+  const deg = gyroAxisMode.startsWith('legacy') ? { x: rate.beta, y: rate.gamma, z: rate.alpha } : { x: rate.alpha, y: rate.beta, z: rate.gamma };
+  const sign = gyroAxisMode.endsWith('-reverse') ? -1 : 1;
+  return { x: deg.x * sign * DEG_TO_RAD, y: deg.y * sign * DEG_TO_RAD, z: deg.z * sign * DEG_TO_RAD };
 }
 
 function rotateGravityByGyro(g, w, dt) {
@@ -610,36 +678,137 @@ function rotateGravityByGyro(g, w, dt) {
   };
 }
 
-function updateGyroStatusText() {
+function updateGyroStatus(force = false) {
+  const now = performance.now();
+  if (!force && now - gyroStatusLastPaint < 300) return;
+  gyroStatusLastPaint = now;
   const el = document.getElementById('gyro-status');
   if (!el) return;
-  if (!gyroReferenceReady) {
-    el.textContent = '陀螺儀座標系：等待靜止歸零';
-    el.className = 'status-tag status-inactive';
-  } else {
-    el.textContent = '陀螺儀座標系：純旋轉追蹤與重力分離中 (5.7)';
+
+  if (navMode === 'normal') {
+    el.textContent = '模式狀態：普通模式 (4.1 靜止偏置)';
     el.className = 'status-tag status-active';
+    return;
   }
+
+  let label, active = false;
+  if (!gyroEnabled) label = '互補重力補償：關閉';
+  else if (!window.isSecureContext) label = '感測器不可用：請用 HTTPS';
+  else if (gyroPermissionState === 'denied') label = '感測器權限被拒絕';
+  else if (gyroInterrupted) label = '陀螺儀中斷，請重新歸零';
+  else if (!gyroRateReady) label = '等待陀螺儀資料...';
+  else if (!gyroReferenceReady) label = '已就緒，請靜止按「矯正歸零」';
+  else { label = '鐵道模式：Y軸實體對齊與SINS慣導中 (5.7)'; active = true; }
+  el.textContent = label;
+  el.className = `status-tag ${active ? 'status-active' : 'status-inactive'}`;
 }
 
-// 怠速過濾與 ZVU 零速更新
-let restDetectionWindow = [];
-function evaluateEngineIdleRest(currentAccelY, gyroRate) {
-  if (currentMode !== 'railway') return false; // 只有鐵道模式嚴格啟用
+function requestGyroPermissionFromGesture() {
+  if (!window.isSecureContext || typeof DeviceMotionEvent === 'undefined') return;
+  gyroPermissionState = 'prompt';
+  let promise = typeof DeviceMotionEvent.requestPermission === 'function' ? DeviceMotionEvent.requestPermission() : Promise.resolve('granted');
+  Promise.resolve(promise).then(state => {
+    if (state === 'granted') {
+      gyroPermissionState = 'granted';
+      initSensorListener();
+      document.getElementById('btn-request-permission').style.display = 'none';
+    } else {
+      gyroPermissionState = 'denied';
+    }
+    updateGyroStatus(true);
+  }).catch(() => {
+    gyroPermissionState = 'error';
+    updateGyroStatus(true);
+  });
+  updateGyroStatus(true);
+}
+
+function stepGyro(rate, now, smoothingAlpha, measuredAccel) {
+  const omega = gyroRateFromEvent(rate);
+  if (!omega) {
+    if (gyroReferenceReady && gyroLastRateTimestamp !== null && now - gyroLastRateTimestamp > 600) {
+      gyroInterrupted = true;
+      gyroReferenceReady = false;
+    }
+    gyroLastTimestamp = null;
+    updateGyroStatus();
+    return null;
+  }
+  gyroRateReady = true;
+  gyroLastRateTimestamp = now;
+  gyroRateHistory.push({ t: now, ...omega });
+  while (gyroRateHistory.length && gyroRateHistory[0].t < now - 2500) gyroRateHistory.shift();
+  
+  if (gyroReferenceReady && gyroLastTimestamp !== null) {
+    const dt = (now - gyroLastTimestamp) / 1000;
+    if (!(dt > 0 && dt <= 0.25)) {
+      gyroInterrupted = true;
+      gyroReferenceReady = false;
+    } else {
+      const corrected = { x: omega.x - gyroBias.x, y: omega.y - gyroBias.y, z: omega.z - gyroBias.z };
+      
+      gyroGravity = rotateGravityByGyro(gyroGravity, corrected, dt);
+
+      const alphaFeedback = 0.01;
+      const accMag = Math.hypot(measuredAccel.x, measuredAccel.y, measuredAccel.z);
+      const forwardAccelCheck = Math.abs(measuredAccel.y - yOffset);
+      
+      if (accMag >= 8.5 && accMag <= 10.8 && forwardAccelCheck < 0.03) { 
+        gyroGravity.x = (1 - alphaFeedback) * gyroGravity.x + alphaFeedback * measuredAccel.x;
+        gyroGravity.y = (1 - alphaFeedback) * gyroGravity.y + alphaFeedback * measuredAccel.y;
+        gyroGravity.z = (1 - alphaFeedback) * gyroGravity.z + alphaFeedback * measuredAccel.z;
+      }
+
+      for (const k of ['x','y','z']) {
+        gyroSmoothedGravity[k] += smoothingAlpha * (gyroGravity[k] - gyroSmoothedGravity[k]);
+      }
+    }
+  }
+  gyroLastTimestamp = now;
+  updateGyroStatus();
+  return omega;
+}
+
+function calibrateGyroFromRest() {
+  if (navMode === 'normal') return;
+  gyroInterrupted = false;
+  gyroReferenceReady = false;
+  if (!gyroRateReady || gyroRateHistory.length < 15) {
+    updateGyroStatus(true);
+    return;
+  }
   const now = performance.now();
-  restDetectionWindow.push({ t: now, accelY: currentAccelY, gyro: Math.hypot(gyroRate.x, gyroRate.y, gyroRate.z) });
-  while (restDetectionWindow.length && restDetectionWindow[0].t < now - 1200) restDetectionWindow.shift();
-  if (restDetectionWindow.length < 15) return false;
-
-  let sumAccel = 0;
-  restDetectionWindow.forEach(p => sumAccel += p.accelY);
-  let meanAccel = sumAccel / restDetectionWindow.length;
-
+  const samples = gyroRateHistory.filter(x => x.t >= now - 2000);
+  if (samples.length < 15) {
+    updateGyroStatus(true);
+    return;
+  }
+  const mean = { x: 0, y: 0, z: 0 };
+  for (const p of samples) for (const k of ['x','y','z']) mean[k] += p[k] / samples.length;
   let variance = 0;
-  restDetectionWindow.forEach(p => variance += (p.accelY - meanAccel)**2);
-  let rms = Math.sqrt(variance / restDetectionWindow.length);
-
-  return Math.abs(meanAccel) < 0.02 && rms < 0.045;
+  for (const p of samples) {
+    variance += (p.x-mean.x)**2 + (p.y-mean.y)**2 + (p.z-mean.z)**2;
+  }
+  const rms = Math.sqrt(variance / samples.length);
+  if (rms > 2.0 * DEG_TO_RAD || Math.hypot(mean.x,mean.y,mean.z) > 8 * DEG_TO_RAD) {
+    gyroInterrupted = true;
+    updateGyroStatus(true);
+    return;
+  }
+  const native = { x: filteredX * axisMultiplier, y: filteredY * axisMultiplier, z: filteredZ };
+  const gNorm = Math.hypot(native.x, native.y, native.z);
+  if (!(gNorm >= 8.2 && gNorm <= 11.4)) {
+    gyroInterrupted = true;
+    updateGyroStatus(true);
+    return;
+  }
+  gyroReferenceGravity = { ...native };
+  gyroGravity = { ...native };
+  gyroSmoothedGravity = { ...native };
+  gyroBias = mean;
+  gyroReferenceReady = true;
+  gyroLastTimestamp = now;
+  updateGyroStatus(true);
 }
 
 const graphStates = {
@@ -649,7 +818,7 @@ const graphStates = {
 
 let records = [];
 try {
-  const savedRecords = localStorage.getItem('speedometer_records_v41');
+  const savedRecords = localStorage.getItem('speedometer_records_v57');
   if (savedRecords) records = JSON.parse(savedRecords);
 } catch (e) {}
 
@@ -669,6 +838,8 @@ const gpsDistValEl = document.getElementById('gps-dist-val');
 const gpsDistUnitEl = document.getElementById('gps-dist-unit');
 const accelValEl = document.getElementById('accel-val');
 const accelXValEl = document.getElementById('accel-x-val');
+const gyroDeltaYEl = document.getElementById('gyro-delta-y');
+const railwayDeltaContainer = document.getElementById('railway-delta-container');
 
 const timerValEl = document.getElementById('timer-val');
 const maxSpeedValEl = document.getElementById('max-speed-val');
@@ -679,7 +850,6 @@ const maxDecelValEl = document.getElementById('max-decel-val');
 const calibStatusEl = document.getElementById('calib-status');
 const gpsStatusEl = document.getElementById('gps-status');
 const biasDisplayYEl = document.getElementById('bias-display-y');
-const appModeSelect = document.getElementById('app-mode-select');
 
 const btnZero = document.getElementById('btn-zero');
 const btnToggleAccel = document.getElementById('btn-toggle-accel');
@@ -687,6 +857,9 @@ const btnToggleGps = document.getElementById('btn-toggle-gps');
 const btnReset = document.getElementById('btn-reset');
 const lpfSlider = document.getElementById('lpf-slider');
 const lpfValEl = document.getElementById('lpf-val');
+const btnModeNormal = document.getElementById('btn-mode-normal');
+const btnModeRailway = document.getElementById('btn-mode-railway');
+const railwaySettingsPanel = document.getElementById('railway-settings-panel');
 
 const p1RecordsTbody = document.getElementById('p1-records-tbody');
 const p2RecordsTbody = document.getElementById('p2-records-tbody');
@@ -696,9 +869,42 @@ const btnPrevPage = document.getElementById('btn-prev-page');
 const btnNextPage = document.getElementById('btn-next-page');
 const pageInfoEl = document.getElementById('page-info');
 
-appModeSelect.addEventListener('change', (e) => {
-  currentMode = e.target.value;
-});
+// 模式按鈕切換邏輯
+function setNavMode(mode) {
+  navMode = mode;
+  if (navMode === 'normal') {
+    btnModeNormal.style.background = '#ff9800';
+    btnModeNormal.style.color = '#121212';
+    btnModeNormal.style.border = 'none';
+
+    btnModeRailway.style.background = '#252525';
+    btnModeRailway.style.color = '#aaa';
+    btnModeRailway.style.border = '1px solid #444';
+
+    railwaySettingsPanel.style.display = 'none';
+    railwayDeltaContainer.style.display = 'none';
+    calibStatusEl.textContent = "未校準 (普通模式)";
+  } else {
+    btnModeRailway.style.background = '#ff9800';
+    btnModeRailway.style.color = '#121212';
+    btnModeRailway.style.border = 'none';
+
+    btnModeNormal.style.background = '#252525';
+    btnModeNormal.style.color = '#aaa';
+    btnModeNormal.style.border = '1px solid #444';
+
+    railwaySettingsPanel.style.display = 'block';
+    railwayDeltaContainer.style.display = 'block';
+    calibStatusEl.textContent = "未校準 (鐵道模式 SINS)";
+  }
+  updateGyroStatus(true);
+}
+
+btnModeNormal.addEventListener('click', () => setNavMode('normal'));
+btnModeRailway.addEventListener('click', () => setNavMode('railway'));
+
+// 初始預設鐵道模式樣式
+setNavMode('railway');
 
 btnGoPage2.addEventListener('click', () => {
   page1.classList.remove('active');
@@ -712,14 +918,26 @@ btnBackP1.addEventListener('click', () => {
   renderP1Records();
 });
 
-document.getElementById('btn-request-permission').addEventListener('click', () => {
-  if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-    DeviceMotionEvent.requestPermission().then(state => {
-      if (state === 'granted') { initSensorListener(); document.getElementById('btn-request-permission').style.display = 'none'; }
-    });
-  } else {
-    initSensorListener(); document.getElementById('btn-request-permission').style.display = 'none';
-  }
+document.getElementById('btn-request-permission').addEventListener('click', requestGyroPermissionFromGesture);
+document.getElementById('btn-retry-gyro').addEventListener('click', requestGyroPermissionFromGesture);
+
+document.getElementById('gyro-axis-mode').value = gyroAxisMode;
+document.getElementById('gyro-axis-mode').addEventListener('change', (event) => {
+  gyroAxisMode = ['legacy','legacy-reverse','standard','standard-reverse'].includes(event.target.value) ? event.target.value : 'legacy';
+  gyroRateHistory = [];
+  gyroReferenceReady = false;
+  gyroInterrupted = false;
+  gyroLastTimestamp = null;
+  updateGyroStatus(true);
+});
+
+document.getElementById('btn-toggle-gyro').addEventListener('click', () => {
+  gyroEnabled = !gyroEnabled;
+  const button = document.getElementById('btn-toggle-gyro');
+  button.textContent = `互補重力補償：${gyroEnabled ? '開啟' : '關閉'}`;
+  button.style.color = gyroEnabled ? '#2ecc71' : '#999';
+  button.style.borderColor = gyroEnabled ? '#2ecc71' : '#777';
+  updateGyroStatus(true);
 });
 
 document.getElementById('btn-request-gps').addEventListener('click', () => { initGpsListener(); });
@@ -740,39 +958,28 @@ function initSensorListener() {
     filteredY += lpfAlpha * (currentRawY - filteredY);
     filteredZ += lpfAlpha * (raw.z - filteredZ);
 
-    const measuredAccel = { x: filteredX, y: filteredY, z: filteredZ };
-    const omega = gyroRateFromEvent(event.rotationRate) || { x: 0, y: 0, z: 0 };
+    let cleanAccelX = filteredX - xOffset;
+    let cleanAccelY = filteredY - yOffset;
+    let omega = { x: 0, y: 0, z: 0 };
 
-    // 1. 純陀螺儀更新空間重力向量（不使用加速度計回授汙染）
-    if (gyroReferenceReady && gyroLastTimestamp !== null) {
-      const dt = (now - gyroLastTimestamp) / 1000.0;
-      if (dt > 0 && dt <= 0.25) {
-        const correctedOmega = {
-          x: omega.x - gyroBias.x,
-          y: omega.y - gyroBias.y,
-          z: omega.z - gyroBias.z
-        };
-        gyroGravity = rotateGravityByGyro(gyroGravity, correctedOmega, dt);
+    if (navMode === 'railway') {
+      const measuredAccel = { x: filteredX, y: filteredY, z: filteredZ };
+      omega = stepGyro(event.rotationRate, now, lpfAlpha, measuredAccel) || { x: 0, y: 0, z: 0 };
+
+      let deltaY = 0.0;
+      if (gyroEnabled && gyroReferenceReady) {
+        deltaY = (gyroSmoothedGravity.y - gyroReferenceGravity.y) * axisMultiplier;
+        cleanAccelY -= deltaY;
       }
-    }
-    gyroLastTimestamp = now;
+      gyroDeltaYEl.textContent = deltaY.toFixed(3);
 
-    // 2. 從總測量值中扣除即時重力向量，完美還原加減速
-    let cleanAccelX = filteredX - gyroGravity.x;
-    let cleanAccelY = filteredY - gyroGravity.y;
-
-    // 3. 依據模式處理
-    if (currentMode === 'railway') {
-      // 鐵道模式：若判定為停止或怠速，強制歸零並觸發 ZVU
       if (currentSpeed < 1.0 && evaluateEngineIdleRest(cleanAccelY, omega)) {
         cleanAccelY = 0.0;
         currentSpeed = 0.0;
       }
-      if (Math.abs(cleanAccelY) < 0.008) cleanAccelY = 0.0;
-    } else {
-      // 普通模式：輕度去噪
-      if (Math.abs(cleanAccelY) < 0.005) cleanAccelY = 0.0;
     }
+
+    if (Math.abs(cleanAccelY) < 0.008) cleanAccelY = 0.0;
 
     accelValEl.textContent = cleanAccelY.toFixed(3);
     accelXValEl.textContent = cleanAccelX.toFixed(3);
@@ -793,7 +1000,7 @@ function initSensorListener() {
             totalDisplacement += currentSpeed * dt;
 
             let speedKmh = currentSpeed * 3.6;
-            speedValEl.textContent = speedKmh.toFixed(1);
+            speedValEl.textContent = speedKmh < 0.05 ? '0.0' : speedKmh.toFixed(1);
 
             if (speedKmh > maxSpeedKmh) {
               maxSpeedKmh = speedKmh;
@@ -829,7 +1036,6 @@ function initSensorListener() {
   });
 }
 
-// GPS 功能
 function calculateHaversineDistance(lat1, lon1, lat2, lon2) {
   const R = 6371e3;
   const dLat = (lat2 - lat1) * Math.PI / 180, dLon = (lon2 - lon1) * Math.PI / 180;
@@ -885,7 +1091,6 @@ function initGpsListener() {
   );
 }
 
-// 應用 transform 矩陣轉換與更新刻度
 function applyZoomTransform(prefix) {
   const st = graphStates[prefix];
   const zoomGroup = document.getElementById(`${prefix}-vtZoomGroup`);
@@ -921,7 +1126,6 @@ function applyZoomTransform(prefix) {
   zoomLabelsEl.innerHTML = zoomLabelsHtml;
 }
 
-// 通用繪製 v-t 圖表
 function drawGraphToElement(prefix, points) {
   const container = document.getElementById(`${prefix}-vtContainer`);
   const gridEl = document.getElementById(`${prefix}-vtGrid`);
@@ -1002,7 +1206,6 @@ function drawGraphToElement(prefix, points) {
   applyZoomTransform(prefix);
 }
 
-// 手勢互動事件初始化
 function initVtGraphInteractivity(prefix) {
   const container = document.getElementById(`${prefix}-vtContainer`);
   const graph = document.getElementById(`${prefix}-vtGraph`);
@@ -1172,7 +1375,6 @@ function initVtGraphInteractivity(prefix) {
   graph.addEventListener('mouseleave', () => { if (interactiveEl) interactiveEl.style.display = "none"; });
 }
 
-// 計時器
 function updateGlobalTimer() {
   if (isAccelRecording || isGpsRecording) {
     if (recordingStartTime !== null) {
@@ -1203,17 +1405,14 @@ function resetZoomState(prefix) {
   applyZoomTransform(prefix);
 }
 
-// 矯正歸零：鎖定當前絕對重力向量作為純陀螺儀追蹤的基準
 btnZero.addEventListener('click', () => {
   xOffset = filteredX; 
   yOffset = filteredY; 
   isCalibrated = true;
   
-  // 紀錄初始重力向量
-  gyroReferenceGravity = { x: filteredX, y: filteredY, z: filteredZ };
-  gyroGravity = { ...gyroReferenceGravity };
-  gyroReferenceReady = true;
-  gyroLastTimestamp = performance.now();
+  if (navMode === 'railway') {
+    calibrateGyroFromRest();
+  }
 
   currentSpeed = 0.0; 
   totalDisplacement = 0.0; 
@@ -1234,8 +1433,7 @@ btnZero.addEventListener('click', () => {
 
   biasDisplayYEl.value = yOffset.toFixed(4) + " m/s²";
   calibStatusEl.className = "status-tag status-active";
-  calibStatusEl.textContent = "已完成校準：純陀螺儀重力追蹤已鎖定";
-  updateGyroStatusText();
+  calibStatusEl.textContent = navMode === 'railway' ? "已完成校準：鐵道SINS基準已鎖定" : "已完成校準：普通模式偏置已鎖定";
 });
 
 btnToggleAccel.addEventListener('click', async () => {
@@ -1323,7 +1521,7 @@ function addRecord(maxSpeed, maxGpsSpeed, displacement, gpsDisplacement, duratio
 }
 
 function saveRecordsToStorage() {
-  try { localStorage.setItem('speedometer_records_v41', JSON.stringify(records)); } catch (e) {}
+  try { localStorage.setItem('speedometer_records_v57', JSON.stringify(records)); } catch (e) {}
 }
 
 function renderP1Records() {
@@ -1373,7 +1571,7 @@ function renderP2Records() {
   pageInfoEl.textContent = `第 ${currentPage} / ${totalPages} 頁`;
   btnPrevPage.disabled = (currentPage === 1);
   btnNextPage.disabled = (currentPage === totalPages);
-};
+}
 
 window.loadRecordGraph = function(id) {
   const target = records.find(r => r.id === id);
@@ -1444,7 +1642,7 @@ btnNextPage.addEventListener('click', () => { const totalPages = Math.ceil(recor
 initVtGraphInteractivity('p1');
 initVtGraphInteractivity('p2');
 renderP1Records();
-updateGyroStatusText();
+updateGyroStatus(true);
 </script>
 
 </body>
