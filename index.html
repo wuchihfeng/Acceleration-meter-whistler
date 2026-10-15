@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>加速度積分 與 GPS 測速器 Longhorn 5.7</title>
+  <title>加速度積分 與 GPS 測速器 Longhorn 5.8</title>
   <style>
   /* --- 基礎樣式還原 --- */
   * { box-sizing: border-box; }
@@ -558,7 +558,7 @@
   </div>
 
   <div style="text-align: center; font-size: 0.75rem; color: #555; margin-top: 15px;">
-    Longhorn 5.7
+    Longhorn 5.8
   </div>
 </div>
 
@@ -746,6 +746,12 @@ function stepGyro(rate, now, smoothingAlpha, measuredAccel) {
       
       gyroGravity = rotateGravityByGyro(gyroGravity, corrected, dt);
 
+      /* 
+        【修復修改】移除行駛中的背景自動修正：
+        確保重力基準完全由手動按下的「矯正歸零」鎖定，
+        避免長途行駛時被鐵道震動與巡航雜訊汙染，使後半段減速時能完整保留負加速度。
+      */
+      /*
       const alphaFeedback = 0.01;
       const accMag = Math.hypot(measuredAccel.x, measuredAccel.y, measuredAccel.z);
       const forwardAccelCheck = Math.abs(measuredAccel.y - yOffset);
@@ -755,6 +761,7 @@ function stepGyro(rate, now, smoothingAlpha, measuredAccel) {
         gyroGravity.y = (1 - alphaFeedback) * gyroGravity.y + alphaFeedback * measuredAccel.y;
         gyroGravity.z = (1 - alphaFeedback) * gyroGravity.z + alphaFeedback * measuredAccel.z;
       }
+      */
 
       for (const k of ['x','y','z']) {
         gyroSmoothedGravity[k] += smoothingAlpha * (gyroGravity[k] - gyroSmoothedGravity[k]);
@@ -815,7 +822,6 @@ const graphStates = {
 
 let records = [];
 try {
-  // 先讀取目前版本；若沒有資料，兼容舊版紀錄鍵，避免升級後歷史紀錄消失。
   const savedRecords = localStorage.getItem('speedometer_records_v57') ||
     localStorage.getItem('longhorn_records_v55') ||
     localStorage.getItem('longhorn_records_v53');
@@ -1441,7 +1447,7 @@ btnZero.addEventListener('click', () => {
 
 btnToggleAccel.addEventListener('click', async () => {
   if (!isCalibrated && !isAccelRecording) {
-    if (!confirm("⚠️ 尚未執行矯正歸零，建議在靜止時按下「矯正歸零」！確定直接開始？")) return;
+    if (!confirm("⚠️ 尚未執行矯正歸零，建議在靜止時按下 !矯正歸零」！確定直接開始？")) return;
   }
   isAccelRecording = !isAccelRecording;
   if (isAccelRecording) {
@@ -1449,7 +1455,6 @@ btnToggleAccel.addEventListener('click', async () => {
     lastAccelTimestamp = performance.now(); startRecordingTimer(); await requestWakeLock();
   } else {
     btnToggleAccel.textContent = "錄製積分"; btnToggleAccel.className = "ctrl-btn btn-gmeter-idle";
-    // 若 GPS 仍在錄製，等最後一個模式停止時再儲存，避免同一段資料重複新增。
     if (!isGpsRecording) saveCurrentRecord(true, false);
     await checkWakeLockState();
   }
@@ -1482,7 +1487,6 @@ function saveCurrentRecord(hasAccel, hasGps) {
 }
 
 btnReset.addEventListener('click', async () => {
-  // 重置時先嘗試儲存，但儲存失敗不能阻止重置本身。
   try {
     if (isAccelRecording || isGpsRecording) saveCurrentRecord(isAccelRecording, isGpsRecording);
   } catch (e) {
@@ -1541,8 +1545,6 @@ function addRecord(maxSpeed, maxGpsSpeed, displacement, gpsDisplacement, duratio
   if (page2.classList.contains('active')) renderP2Records();
 }
 
-// 主儲存使用 localStorage，並以 IndexedDB 作為第二份備援。
-// 網站同一個 origin（協定、網域、連接埠）下重新整理時，兩者都應保留資料。
 const LONGHORN_DB_NAME = 'LonghornPersistentStore';
 const LONGHORN_DB_VERSION = 1;
 
@@ -1592,7 +1594,6 @@ async function restoreRecordsFromIndexedDB() {
     } finally { db.close(); }
     if (!saved) return;
 
-    // 合併兩份資料，以 id 去重；保留較完整的一份，並依 id 新到舊排列。
     const merged = new Map();
     for (const item of saved) if (item && item.id != null) merged.set(String(item.id), item);
     for (const item of records) if (item && item.id != null) merged.set(String(item.id), item);
@@ -1606,7 +1607,6 @@ async function restoreRecordsFromIndexedDB() {
       if (page2.classList.contains('active')) renderP2Records();
     }
   } catch (e) {
-    // localStorage 仍可獨立使用；IndexedDB 備援不可用時記錄診斷資訊。
     console.warn('載入 IndexedDB 備援紀錄失敗：', e);
   }
 }
@@ -1623,7 +1623,6 @@ function saveRecordsToStorage() {
     console.error('localStorage 儲存歷史紀錄失敗：', e);
   }
 
-  // 備援寫入 IndexedDB；不阻塞畫面，但等待交易完成後才視為成功。
   writeRecordsToIndexedDB(snapshot).catch(e => {
     console.error('IndexedDB 備援儲存歷史紀錄失敗：', e);
     if (!localSaved) {
@@ -1753,7 +1752,6 @@ initVtGraphInteractivity('p1');
 initVtGraphInteractivity('p2');
 renderP1Records();
 updateGyroStatus(true);
-// 若 localStorage 在重整後為空或不完整，從 IndexedDB 備援恢復紀錄。
 restoreRecordsFromIndexedDB();
 </script>
 
