@@ -658,7 +658,18 @@ function gyroRateFromEvent(rate) {
   if (!rate || ![rate.alpha, rate.beta, rate.gamma].every(Number.isFinite)) return null;
   const deg = gyroAxisMode.startsWith('legacy') ? { x: rate.beta, y: rate.gamma, z: rate.alpha } : { x: rate.alpha, y: rate.beta, z: rate.gamma };
   const sign = gyroAxisMode.endsWith('-reverse') ? -1 : 1;
-  return { x: deg.x * sign * DEG_TO_RAD, y: deg.y * sign * DEG_TO_RAD, z: deg.z * sign * DEG_TO_RAD };
+  
+  let rx = deg.x * sign * DEG_TO_RAD;
+  let ry = deg.y * sign * DEG_TO_RAD;
+  let rz = deg.z * sign * DEG_TO_RAD;
+
+  // 設定死區閾值 (Deadband Threshold: 0.02 rad/s) 過濾微小雜訊
+  const DEAD_ZONE = 0.02;
+  if (Math.abs(rx) < DEAD_ZONE) rx = 0;
+  if (Math.abs(ry) < DEAD_ZONE) ry = 0;
+  if (Math.abs(rz) < DEAD_ZONE) rz = 0;
+
+  return { x: rx, y: ry, z: rz };
 }
 
 function rotateGravityByGyro(g, w, dt) {
@@ -745,23 +756,6 @@ function stepGyro(rate, now, smoothingAlpha, measuredAccel) {
       const corrected = { x: omega.x - gyroBias.x, y: omega.y - gyroBias.y, z: omega.z - gyroBias.z };
       
       gyroGravity = rotateGravityByGyro(gyroGravity, corrected, dt);
-
-      /* 
-        【修復修改】移除行駛中的背景自動修正：
-        確保重力基準完全由手動按下的「矯正歸零」鎖定，
-        避免長途行駛時被鐵道震動與巡航雜訊汙染，使後半段減速時能完整保留負加速度。
-      */
-      /*
-      const alphaFeedback = 0.01;
-      const accMag = Math.hypot(measuredAccel.x, measuredAccel.y, measuredAccel.z);
-      const forwardAccelCheck = Math.abs(measuredAccel.y - yOffset);
-      
-      if (accMag >= 8.5 && accMag <= 10.8 && forwardAccelCheck < 0.03) { 
-        gyroGravity.x = (1 - alphaFeedback) * gyroGravity.x + alphaFeedback * measuredAccel.x;
-        gyroGravity.y = (1 - alphaFeedback) * gyroGravity.y + alphaFeedback * measuredAccel.y;
-        gyroGravity.z = (1 - alphaFeedback) * gyroGravity.z + alphaFeedback * measuredAccel.z;
-      }
-      */
 
       for (const k of ['x','y','z']) {
         gyroSmoothedGravity[k] += smoothingAlpha * (gyroGravity[k] - gyroSmoothedGravity[k]);
@@ -977,7 +971,17 @@ function initSensorListener() {
 
       let deltaY = 0.0;
       if (gyroEnabled && gyroReferenceReady) {
-        deltaY = (gyroSmoothedGravity.y - gyroReferenceGravity.y) * axisMultiplier;
+        const rawDeltaY = (gyroSmoothedGravity.y - gyroReferenceGravity.y) * axisMultiplier;
+        
+        // 【新增設定】設定千分之 8 (8‰) 坡度閾值：0.008 * 9.80665 ≈ 0.0785 m/s²
+        // 大於等於此閾值時，程式才開始套用陀螺儀重力矯正
+        const slopeThreshold = 0.008 * 9.80665;
+        if (Math.abs(rawDeltaY) >= slopeThreshold) {
+          deltaY = rawDeltaY;
+        } else {
+          deltaY = 0.0;
+        }
+
         cleanAccelY -= deltaY;
       }
       gyroDeltaYEl.textContent = deltaY.toFixed(3);
@@ -1447,7 +1451,7 @@ btnZero.addEventListener('click', () => {
 
 btnToggleAccel.addEventListener('click', async () => {
   if (!isCalibrated && !isAccelRecording) {
-    if (!confirm("⚠️ 尚未執行矯正歸零，建議在靜止時按下 !矯正歸零」！確定直接開始？")) return;
+    if (!confirm("⚠️ 尚未執行矯正歸零，建議在靜止時按下「矯正歸零」！確定直接開始？")) return;
   }
   isAccelRecording = !isAccelRecording;
   if (isAccelRecording) {
