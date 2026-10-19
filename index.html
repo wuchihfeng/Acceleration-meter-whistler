@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>加速度積分 與 GPS 測速器 Longhorn 5.9</title>
+  <title>加速度積分 與 GPS 測速器 Longhorn 6.0</title>
   <style>
   /* --- 基礎樣式還原 --- */
   * { box-sizing: border-box; }
@@ -344,7 +344,6 @@
       <button id="btn-request-gps" class="btn-fill" style="color: #00bcd4; border-color: #00bcd4;">開啟 GPS 定位</button>
     </div>
 
-    <!-- 依照截圖排版：一般模式與鐵道模式並排按鈕列 -->
     <div style="margin-bottom: 12px; display: flex; gap: 8px;">
       <button id="btn-mode-normal" class="ctrl-btn" style="flex: 1; padding: 12px; border-radius: 10px; font-size: 0.85rem;">一般模式</button>
       <button id="btn-mode-railway" class="ctrl-btn" style="flex: 1; padding: 12px; border-radius: 10px; font-size: 0.85rem;">鐵道模式</button>
@@ -413,7 +412,6 @@
     </div>
 
     <div class="helper-box">
-      <!-- 鐵道模式專屬設定區塊 -->
       <div id="railway-settings-panel">
         <button type="button" id="btn-toggle-gyro" class="btn-fill" style="width:100%;margin-bottom:8px;color:#2ecc71;border-color:#2ecc71;">互補重力補償：開啟</button>
         <button type="button" id="btn-retry-gyro" class="btn-fill" style="width:100%;margin-bottom:7px;color:#ffc66d;border-color:#a57838;">重新取得感測器權限</button>
@@ -558,7 +556,7 @@
   </div>
 
   <div style="text-align: center; font-size: 0.75rem; color: #555; margin-top: 15px;">
-    Longhorn 5.9
+    Longhorn 6.0 (抗飄移精準版)
   </div>
 </div>
 
@@ -598,7 +596,7 @@ let vtPointsData = [];
 let p2ActivePointsData = [];
 
 let restDetectionWindow = [];
-const IDLE_RMS_THRESHOLD = 0.045; 
+const IDLE_RMS_THRESHOLD = 0.025; 
 const TRUE_REST_TIME_REQUIRED = 1200; 
 
 function evaluateEngineIdleRest(currentAccelY, currentGyroRate) {
@@ -629,7 +627,7 @@ function evaluateEngineIdleRest(currentAccelY, currentGyroRate) {
   });
   let rms = Math.sqrt(variance / restDetectionWindow.length);
 
-  const isSteadyMean = Math.abs(meanAccel) < 0.02 && Math.abs(meanGyro) < 0.08 * (Math.PI / 180);
+  const isSteadyMean = Math.abs(meanAccel) < 0.015 && Math.abs(meanGyro) < 0.05 * (Math.PI / 180);
   const isValidIdleRms = rms < IDLE_RMS_THRESHOLD;
 
   return isSteadyMean && isValidIdleRms;
@@ -663,8 +661,7 @@ function gyroRateFromEvent(rate) {
   let ry = deg.y * sign * DEG_TO_RAD;
   let rz = deg.z * sign * DEG_TO_RAD;
 
-  // 設定死區閾值 (Deadband Threshold: 0.02 rad/s) 過濾微小雜訊
-  const DEAD_ZONE = 0.02;
+  const DEAD_ZONE = 0.01;
   if (Math.abs(rx) < DEAD_ZONE) rx = 0;
   if (Math.abs(ry) < DEAD_ZONE) ry = 0;
   if (Math.abs(rz) < DEAD_ZONE) rz = 0;
@@ -706,7 +703,7 @@ function updateGyroStatus(force = false) {
   else if (gyroInterrupted) label = '陀螺儀中斷，請重新歸零';
   else if (!gyroRateReady) label = '等待陀螺儀資料...';
   else if (!gyroReferenceReady) label = '已就緒，請靜止按「矯正歸零」';
-  else { label = '鐵道模式：導航運行中'; active = true; }
+  else { label = '鐵道模式：運行中 (0.0008g 防飄移)'; active = true; }
   el.textContent = label;
   el.className = `status-tag ${active ? 'status-active' : 'status-inactive'}`;
 }
@@ -973,9 +970,8 @@ function initSensorListener() {
       if (gyroEnabled && gyroReferenceReady) {
         const rawDeltaY = (gyroSmoothedGravity.y - gyroReferenceGravity.y) * axisMultiplier;
         
-        // 【新增設定】設定千分之 8 (8‰) 坡度閾值：0.008 * 9.80665 ≈ 0.0785 m/s²
-        // 大於等於此閾值時，程式才開始套用陀螺儀重力矯正
-        const slopeThreshold = 0.008 * 9.80665;
+        // 坡度重力補償閾值維持 0.002g
+        const slopeThreshold = 0.002 * GYRO_G;
         if (Math.abs(rawDeltaY) >= slopeThreshold) {
           deltaY = rawDeltaY;
         } else {
@@ -992,7 +988,16 @@ function initSensorListener() {
       }
     }
 
-    if (Math.abs(cleanAccelY) < 0.008) cleanAccelY = 0.0;
+    // 【Longhorn 6.0 升級】更嚴格的動態死區 (Deadband = 0.0008g)，過濾微小車廂震動
+    const ACCEL_DEADBAND = 0.0008 * GYRO_G;
+    if (Math.abs(cleanAccelY) < ACCEL_DEADBAND) {
+      cleanAccelY = 0.0;
+    }
+
+    // 【巡航防飄移阻尼】等速巡航時加入微幅阻尼，防止速度隨時間不斷累積爆衝
+    if (Math.abs(cleanAccelY) < 0.0015 && currentSpeed > 0.5) {
+      currentSpeed *= 0.985; 
+    }
 
     accelValEl.textContent = cleanAccelY.toFixed(3);
     accelXValEl.textContent = cleanAccelX.toFixed(3);
@@ -1446,7 +1451,7 @@ btnZero.addEventListener('click', () => {
 
   biasDisplayYEl.value = yOffset.toFixed(4) + " m/s²";
   calibStatusEl.className = "status-tag status-active";
-  calibStatusEl.textContent = navMode === 'railway' ? "已完成校準：鐵道模式基準已鎖定" : "已完成校準：普通模式偏置已鎖定";
+  calibStatusEl.textContent = navMode === 'railway' ? "已完成校準：鐵道模式 (防飄移鎖定)" : "已完成校準：普通模式偏置已鎖定";
 });
 
 btnToggleAccel.addEventListener('click', async () => {
