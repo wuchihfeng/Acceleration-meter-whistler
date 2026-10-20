@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>加速度積分 與 GPS 測速器 Longhorn 6.0</title>
+  <title>加速度積分 與 GPS 測速器 Longhorn 6.1</title>
   <style>
   /* --- 基礎樣式還原 --- */
   * { box-sizing: border-box; }
@@ -556,7 +556,7 @@
   </div>
 
   <div style="text-align: center; font-size: 0.75rem; color: #555; margin-top: 15px;">
-    Longhorn 6.0
+    Longhorn 6.1 (純陀螺儀物理信賴版)
   </div>
 </div>
 
@@ -703,7 +703,7 @@ function updateGyroStatus(force = false) {
   else if (gyroInterrupted) label = '陀螺儀中斷，請重新歸零';
   else if (!gyroRateReady) label = '等待陀螺儀資料...';
   else if (!gyroReferenceReady) label = '已就緒，請靜止按「矯正歸零」';
-  else { label = '鐵道模式：運行中 (0.0008g 防飄移)'; active = true; }
+  else { label = '鐵道模式：運行中 (純陀螺儀物理信賴版)'; active = true; }
   el.textContent = label;
   el.className = `status-tag ${active ? 'status-active' : 'status-inactive'}`;
 }
@@ -988,16 +988,14 @@ function initSensorListener() {
       }
     }
 
-    // 【Longhorn 6.0 升級】更嚴格的動態死區 (Deadband = 0.0008g)，過濾微小車廂震動
+    // 保留死區 (Deadband = 0.0008g)，過濾微小背景雜訊
     const ACCEL_DEADBAND = 0.0008 * GYRO_G;
     if (Math.abs(cleanAccelY) < ACCEL_DEADBAND) {
       cleanAccelY = 0.0;
     }
 
-    // 【巡航防飄移阻尼】等速巡航時加入微幅阻尼，防止速度隨時間不斷累積爆衝
-    if (Math.abs(cleanAccelY) < 0.0015 && currentSpeed > 0.5) {
-      currentSpeed *= 0.985; 
-    }
+    // [已完全移除人工巡航阻尼 currentSpeed *= 0.985]
+    // 我們完全信賴陀螺儀與重力補償的物理計算結果
 
     accelValEl.textContent = cleanAccelY.toFixed(3);
     accelXValEl.textContent = cleanAccelX.toFixed(3);
@@ -1451,7 +1449,7 @@ btnZero.addEventListener('click', () => {
 
   biasDisplayYEl.value = yOffset.toFixed(4) + " m/s²";
   calibStatusEl.className = "status-tag status-active";
-  calibStatusEl.textContent = navMode === 'railway' ? "已完成校準：鐵道模式 (防飄移鎖定)" : "已完成校準：普通模式偏置已鎖定";
+  calibStatusEl.textContent = navMode === 'railway' ? "已完成校準：鐵道模式 (純陀螺儀物理信賴)" : "已完成校準：普通模式偏置已鎖定";
 });
 
 btnToggleAccel.addEventListener('click', async () => {
