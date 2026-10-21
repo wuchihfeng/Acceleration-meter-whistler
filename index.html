@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>加速度積分 與 GPS 測速器 Longhorn 6.1</title>
+  <title>加速度積分 與 GPS 測速器 Longhorn 6.2</title>
   <style>
   /* --- 基礎樣式還原 --- */
   * { box-sizing: border-box; }
@@ -556,7 +556,7 @@
   </div>
 
   <div style="text-align: center; font-size: 0.75rem; color: #555; margin-top: 15px;">
-    Longhorn 6.1
+    Longhorn 6.2
   </div>
 </div>
 
@@ -970,8 +970,8 @@ function initSensorListener() {
       if (gyroEnabled && gyroReferenceReady) {
         const rawDeltaY = (gyroSmoothedGravity.y - gyroReferenceGravity.y) * axisMultiplier;
         
-        // 坡度重力補償閾值維持 0.002g
-        const slopeThreshold = 0.002 * GYRO_G;
+        /* 💡 改為 0.25% 坡度重力補償閾值 (0.0025g) */
+        const slopeThreshold = 0.0025 * GYRO_G;
         if (Math.abs(rawDeltaY) >= slopeThreshold) {
           deltaY = rawDeltaY;
         } else {
@@ -993,9 +993,6 @@ function initSensorListener() {
     if (Math.abs(cleanAccelY) < ACCEL_DEADBAND) {
       cleanAccelY = 0.0;
     }
-
-    // [已完全移除人工巡航阻尼 currentSpeed *= 0.985]
-    // 我們完全信賴陀螺儀與重力補償的物理計算結果
 
     accelValEl.textContent = cleanAccelY.toFixed(3);
     accelXValEl.textContent = cleanAccelX.toFixed(3);
