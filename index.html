@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>加速度積分 與 GPS 測速器 Longhorn 6.2</title>
+  <title>加速度積分 與 GPS 測速器 Longhorn 6.3</title>
   <style>
   * { box-sizing: border-box; }
   body { margin: 0; background: #121212; color: #e0e0e0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; justify-content: center; padding: 12px; width: 100%; }
@@ -171,6 +171,8 @@
         <div class="diag-row"><span>重力總量 |g|</span><span class="diag-val" id="diag-gnorm">9.807</span></div>
         <div class="diag-row"><span>純重力狀態</span><span class="diag-val" id="diag-pure">--</span></div>
         <div class="diag-row"><span>坡度重力 (Method C)</span><span class="diag-val" id="diag-slope">0.000</span></div>
+        <div class="diag-row"><span>坡度誤差</span><span class="diag-val" id="diag-slope-err">0.000</span></div>
+        <div class="diag-row"><span>突變次數</span><span class="diag-val" id="diag-jump">0</span></div>
         <div class="diag-row"><span>校正次數</span><span class="diag-val" id="diag-corr">0</span></div>
       </div>
     </div>
@@ -327,7 +329,7 @@
   </div>
 
   <div style="text-align: center; font-size: 0.75rem; color: #555; margin-top: 15px;">
-    Longhorn 6.2
+    Longhorn 6.3
   </div>
 </div>
 
@@ -344,11 +346,8 @@ async function requestWakeLock() {
 }
 async function releaseWakeLock() {
   if (wakeLock !== null) {
-    try { await wakeLock.release(); wakeLock = null; } catch (err) {}
-  }
-}
-
-let navMode = 'railway';
+    try { await wakeLock.release(); wakeLock = null;
+         let navMode = 'railway';
 
 let isAccelRecording = false, isGpsRecording = false, isCalibrated = false;
 let xOffset = 0.0, yOffset = 0.0;
@@ -380,7 +379,7 @@ function evaluateEngineIdleRest(currentAccelY, currentGyroRate) {
 
   while (restDetectionWindow.length && restDetectionWindow[0].t < now - TRUE_REST_TIME_REQUIRED) {
     restDetectionWindow.shift();
-      }
+  }
 
   if (restDetectionWindow.length < 15) return false;
 
@@ -426,7 +425,10 @@ let gyroStatusLastPaint = 0;
 // === Method C 專用狀態 ===
 let slopeGravityY = 0.0;          // 當前估計的坡度重力分量 (m/s²)
 let slopeCorrectionCount = 0;     // 累計校正次數
+let slopeJumpCount = 0;           // 突變偵測次數
+let slopeError = 0.0;             // 當前坡度誤差
 let lastPureGravityState = false;
+let lastFilteredYForSlope = 0.0;  // 用於突變偵測
 
 function gyroRateFromEvent(rate) {
   if (!rate || ![rate.alpha, rate.beta, rate.gamma].every(Number.isFinite)) return null;
@@ -582,8 +584,10 @@ function calibrateGyroFromRest() {
   updateGyroStatus(true);
 }
 
-// === Method C 核心：獨立坡度估計 ===
-// 不碰卡爾曼 / 陀螺儀的內部狀態，只輸出一個「坡度重力分量」給積分層扣掉
+// === Method C 核心：獨立坡度估計（6.2.1 改良版） ===
+// 改良點：
+//   1. 動態 alpha：誤差大時快收斂，誤差小時慢微調
+//   2. 突變偵測：filteredY 突然大變時，直接跳到新坡度，不等收斂
 function updateSlopeGravityMethodC(now) {
   if (navMode !== 'railway') return;
 
@@ -593,33 +597,50 @@ function updateSlopeGravityMethodC(now) {
   const gNorm = Math.hypot(nativeX, nativeY, nativeZ);
   const gError = Math.abs(gNorm - GYRO_G);
 
-  // 純重力狀態：向量長度接近 g
-  // 門檻 0.12：震動會讓 gNorm 抖動，但通常 < 0.1；加速度會讓 gNorm 明顯偏離
   const isPureGravity = gError < 0.12;
-
-  // 可信度加權：越接近 g，越可信
   const trust = Math.exp(-Math.pow(gError, 2) / 0.05);
 
-  if (isPureGravity) {
-    // 純重力時，nativeY 就是「真實坡度重力分量」（乘上 axisMultiplier 已對齊）
-    // 用「目標值」slowly pull slopeGravityY 過去
-    const targetSlope = nativeY;
-    // alpha 0.02：60Hz 下約 1 秒收斂一半，不會突然跳動
-    const alpha = 0.02 * Math.max(trust, 0.3);
-    slopeGravityY += alpha * (targetSlope - slopeGravityY);
-    slopeCorrectionCount++;
+  // --- 突變偵測：filteredY 在短時間內大變 → 坡度突變，直接跳 ---
+  const dFilteredY = Math.abs(filteredY - lastFilteredYForSlope);
+  if (dFilteredY > 0.25) {
+    slopeGravityY = nativeY;
+    slopeJumpCount++;
   }
-  // 非純重力時：什麼都不做（保留上一次的坡度估計）
-  // 這正是 Method C 的核心：加速度計只在「沒有加速度」時可信
+  lastFilteredYForSlope = filteredY;
+
+  if (isPureGravity) {
+    const targetSlope = nativeY;
+    const error = targetSlope - slopeGravityY;
+    const absError = Math.abs(error);
+    slopeError = error;
+
+    // --- 動態 alpha：誤差大時快收斂，誤差小時慢微調 ---
+    let alpha;
+    if (absError > 0.1) {
+      alpha = 0.20;
+    } else if (absError > 0.02) {
+      alpha = 0.08;
+    } else {
+      alpha = 0.015;
+    }
+    alpha *= Math.max(trust, 0.3);
+
+    slopeGravityY += alpha * error;
+    slopeCorrectionCount++;
+  } else {
+    // 非純重力：坡度誤差無法判斷，保留上一次估計
+    slopeError = 0.0;
+  }
 
   lastPureGravityState = isPureGravity;
 
-  // 診斷更新（節流，避免每幀寫 DOM）
   if (now - (updateSlopeGravityMethodC._lastPaint || 0) > 200) {
     updateSlopeGravityMethodC._lastPaint = now;
     const gnormEl = document.getElementById('diag-gnorm');
     const pureEl = document.getElementById('diag-pure');
     const slopeEl = document.getElementById('diag-slope');
+    const slopeErrEl = document.getElementById('diag-slope-err');
+    const jumpEl = document.getElementById('diag-jump');
     const corrEl = document.getElementById('diag-corr');
     if (gnormEl) gnormEl.textContent = gNorm.toFixed(3);
     if (pureEl) {
@@ -627,6 +648,8 @@ function updateSlopeGravityMethodC(now) {
       pureEl.style.color = isPureGravity ? '#2ecc71' : '#e74c3c';
     }
     if (slopeEl) slopeEl.textContent = slopeGravityY.toFixed(3);
+    if (slopeErrEl) slopeErrEl.textContent = slopeError.toFixed(3);
+    if (jumpEl) jumpEl.textContent = slopeJumpCount;
     if (corrEl) corrEl.textContent = slopeCorrectionCount;
   }
 }
@@ -1033,7 +1056,7 @@ function drawGraphToElement(prefix, points) {
     t: p.t, v: p.v, gv: p.gv || 0
   }));
 
-  let lineD = `M ${svgPoints[0].x.toFixed(1)} ${svgPoints[0].y.toFixed(1)}`;
+    let lineD = `M ${svgPoints[0].x.toFixed(1)} ${svgPoints[0].y.toFixed(1)}`;
   for (let i = 1; i < svgPoints.length; i++) lineD += ` L ${svgPoints[i].x.toFixed(1)} ${svgPoints[i].y.toFixed(1)}`;
 
   let gpsLineD = `M ${svgPoints[0].x.toFixed(1)} ${svgPoints[0].gpsY.toFixed(1)}`;
@@ -1260,6 +1283,9 @@ btnZero.addEventListener('click', () => {
   // Method C：校準時把坡度估計歸零（因為此刻車站水平、車靜止）
   slopeGravityY = 0.0;
   slopeCorrectionCount = 0;
+  slopeJumpCount = 0;
+  slopeError = 0.0;
+  lastFilteredYForSlope = filteredY;
 
   currentSpeed = 0.0;
   totalDisplacement = 0.0;
@@ -1280,7 +1306,7 @@ btnZero.addEventListener('click', () => {
 
   biasDisplayYEl.value = yOffset.toFixed(4) + " m/s²";
   calibStatusEl.className = "status-tag status-active";
-  calibStatusEl.textContent = navMode === 'railway' ? "已完成校準：鐵道模式 (Method C)" : "已完成校準：普通模式偏置已鎖定";
+  calibStatusEl.textContent = navMode === 'railway' ? "已完成校準：鐵道模式 (Method C 6.2.1)" : "已完成校準：普通模式偏置已鎖定";
 });
 
 btnToggleAccel.addEventListener('click', async () => {
@@ -1340,7 +1366,7 @@ btnReset.addEventListener('click', async () => {
   currentSpeed = 0.0; maxSpeedKmh = 0.0; maxGpsSpeedKmh = 0.0;
   maxAccelVal = 0.0; maxDecelVal = 0.0; totalDisplacement = 0.0; totalGpsDisplacement = 0.0;
   totalRecordedTime = 0.0; lastAccelTimestamp = null; vtPointsData = [];
-  slopeGravityY = 0.0; slopeCorrectionCount = 0;
+  slopeGravityY = 0.0; slopeCorrectionCount = 0; slopeJumpCount = 0; slopeError = 0.0;
 
   resetZoomState('p1');
   document.getElementById('p1-vtContainer').classList.remove('has-data');
