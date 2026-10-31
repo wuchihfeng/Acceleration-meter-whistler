@@ -3,300 +3,70 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>加速度積分 與 GPS 測速器 Longhorn 6.1</title>
+  <title>加速度積分 與 GPS 測速器 Longhorn 6.2</title>
   <style>
-  /* --- 基礎樣式還原 --- */
   * { box-sizing: border-box; }
-
-  body { 
-    margin: 0; 
-    background: #121212; 
-    color: #e0e0e0; 
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
-    display: flex; 
-    justify-content: center; 
-    padding: 12px; 
-    width: 100%;   
-  }
-
-  .calculator { 
-    background: #1e1e1e; 
-    padding: 20px; 
-    border-radius: 16px; 
-    width: 100%;       
-    max-width: 440px; 
-    border: 1px solid #333;
-    box-shadow: 0 12px 30px rgba(0,0,0,0.45); 
-    overflow: hidden;  
-  }
-
+  body { margin: 0; background: #121212; color: #e0e0e0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; justify-content: center; padding: 12px; width: 100%; }
+  .calculator { background: #1e1e1e; padding: 20px; border-radius: 16px; width: 100%; max-width: 440px; border: 1px solid #333; box-shadow: 0 12px 30px rgba(0,0,0,0.45); overflow: hidden; }
   .page-section { display: none; }
   .page-section.active { display: block; }
-
   h1 { font-size: 1.2rem; color: #ff9800; text-align: center; margin: 0 0 15px; }
-
-  .calculator button:active,
-  .record-card button:active { 
-    filter: brightness(0.75) !important; 
-    transform: scale(0.95) !important; 
-    transition: filter 0.05s, transform 0.05s !important;
-  }
-
-  input[type="text"], select { 
-    width: 100%; 
-    padding: 10px; 
-    background: #252525; 
-    border: 1px solid #444; 
-    border-radius: 8px; 
-    color: #fff; 
-    outline: none; 
-    font-size: 0.85rem;
-  }
-
-  .ctrl-btn { 
-    flex: 1; 
-    border: none; 
-    padding: 10px 4px; 
-    border-radius: 8px; 
-    font-weight: bold; 
-    cursor: pointer; 
-    font-size: 0.82rem;
-    white-space: nowrap;
-    transition: background 0.2s, color 0.2s;
-  }
-
+  .calculator button:active, .record-card button:active { filter: brightness(0.75) !important; transform: scale(0.95) !important; transition: filter 0.05s, transform 0.05s !important; }
+  input[type="text"], select { width: 100%; padding: 10px; background: #252525; border: 1px solid #444; border-radius: 8px; color: #fff; outline: none; font-size: 0.85rem; }
+  .ctrl-btn { flex: 1; border: none; padding: 10px 4px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 0.82rem; white-space: nowrap; transition: background 0.2s, color 0.2s; }
   .btn-zero-style { background: #e65c00; color: #ffffff; }
   .btn-zero-style:hover { background: #cf5300; }
-
   .btn-gmeter-recording { background: #e74c3c !important; color: #fff !important; }
   .btn-gmeter-idle { background: #ff9800; color: #121212; }
-
   .btn-gps-recording { background: #e74c3c !important; color: #fff !important; }
   .btn-gps-idle { background: #00bcd4; color: #121212; }
-
-  .speed-compare-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    margin-bottom: 12px;
-  }
-
-  .speed-card {
-    background: #181818;
-    border: 1px solid #2a2a2a;
-    border-radius: 10px;
-    padding: 10px 5px;
-    text-align: center;
-  }
-
+  .speed-compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+  .speed-card { background: #181818; border: 1px solid #2a2a2a; border-radius: 10px; padding: 10px 5px; text-align: center; }
   .speed-card-title { font-size: 0.75rem; color: #888; margin-bottom: 4px; font-weight: 600; }
   .speed-val-lg { font-size: 2rem; font-weight: 800; line-height: 1.1; }
-
   .gmeter-color { color: #ff9800; }
   .gps-color { color: #00bcd4; }
   .unit { font-size: 0.75rem; color: #666; margin-left: 2px; }
-
-  .result-box { 
-    background: #121212; 
-    padding: 14px; 
-    border-radius: 12px; 
-    text-align: center; 
-    margin: 12px 0; 
-    border: 1px solid #222; 
-  }
-  
-  .distance-compare-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-    margin-bottom: 10px;
-    padding-bottom: 10px;
-    border-bottom: 1px dashed #333;
-  }
-
-  .distance-item {
-    background: #181818;
-    padding: 8px;
-    border-radius: 8px;
-    border: 1px solid #2a2a2a;
-  }
-
+  .result-box { background: #121212; padding: 14px; border-radius: 12px; text-align: center; margin: 12px 0; border: 1px solid #222; }
+  .distance-compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px dashed #333; }
+  .distance-item { background: #181818; padding: 8px; border-radius: 8px; border: 1px solid #2a2a2a; }
   .distance-title { font-size: 0.7rem; color: #888; margin-bottom: 3px; }
   .distance-val { font-size: 0.95rem; font-weight: 700; }
-
   .info { font-size: 0.8rem; color: #aaa; margin-top: 4px; }
   .axis-title { color: #888; font-weight: 600; }
-
-  .btn-row { 
-    display: grid; 
-    grid-template-columns: 1fr 1fr; 
-    gap: 8px;                       
-    margin: 10px 0; 
-  }
-
-  .reset-btn { 
-    background: #333; 
-    color: #999; 
-    border: 1px solid #444; 
-    border-radius: 8px; 
-    font-size: 0.82rem;
-    font-weight: bold;
-    cursor: pointer;
-  }
-
-  .helper-box {
-    background: #2a2a2a;
-    padding: 14px;
-    border-radius: 12px;
-    margin-bottom: 15px;
-    border: 1px dashed #555;
-  }
-
-  .helper-label {
-    color: #ff9800;
-    font-weight: bold;
-    display: block;
-    margin-bottom: 8px;
-    font-size: 0.85rem;
-  }
-
-  .helper-inputs {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    margin-bottom: 10px;
-    margin-top: 6px;
-  }
-
-  input[type="range"] {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 100%;
-    height: 8px;
-    border-radius: 4px;
-    background: linear-gradient(to right, #007aff 0%, #007aff 65%, #e0e0e0 65%, #e0e0e0 100%);
-    outline: none;
-  }
-
-  input[type="range"]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background: #007aff;
-    cursor: pointer;
-  }
-
-  .btn-fill {
-    flex: 1;
-    padding: 10px;
-    background: transparent;
-    color: #ff9800;
-    border: 1.5px solid #ff9800;
-    border-radius: 8px;
-    font-weight: bold;
-    cursor: pointer;
-    font-size: 0.85rem;
-  }
-
-  /* --- v-t 圖表區塊 --- */
-  .graph-container {
-    margin: 15px 0;
-    width: 100%;
-    height: 250px;
-    position: relative;
-    box-sizing: border-box;
-    touch-action: none;
-    overflow: hidden;
-    border-radius: 12px;
-  }
-
-  .vtGraphClass {
-    background-color: #121212; 
-    border: 1px solid #333333; 
-    border-radius: 12px;        
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35); 
-    display: block;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-  }
-
-  .graph-placeholder {
-    position: absolute;
-    top: 0; left: 0; width: 100%; height: 100%;
-    display: flex; align-items: center; justify-content: center;
-    pointer-events: none;
-    background-image: radial-gradient(#333333 1px, transparent 1px);
-    background-size: 16px 16px;
-    background-position: center;
-    border-radius: 12px; color: #aaaaaa; font-size: 0.82rem; font-weight: 600;
-    background-color: #1e1e1e; opacity: 0.95; padding: 8px 16px;
-    border: 1px solid #333333;
-    transition: opacity 0.3s ease; z-index: 5;
-  }
-
+  .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
+  .reset-btn { background: #333; color: #999; border: 1px solid #444; border-radius: 8px; font-size: 0.82rem; font-weight: bold; cursor: pointer; }
+  .helper-box { background: #2a2a2a; padding: 14px; border-radius: 12px; margin-bottom: 15px; border: 1px dashed #555; }
+  .helper-label { color: #ff9800; font-weight: bold; display: block; margin-bottom: 8px; font-size: 0.85rem; }
+  .helper-inputs { display: flex; align-items: center; gap: 5px; margin-bottom: 10px; margin-top: 6px; }
+  input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 8px; border-radius: 4px; background: linear-gradient(to right, #007aff 0%, #007aff 65%, #e0e0e0 65%, #e0e0e0 100%); outline: none; }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border-radius: 50%; background: #007aff; cursor: pointer; }
+  .btn-fill { flex: 1; padding: 10px; background: transparent; color: #ff9800; border: 1.5px solid #ff9800; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 0.85rem; }
+  .graph-container { margin: 15px 0; width: 100%; height: 250px; position: relative; box-sizing: border-box; touch-action: none; overflow: hidden; border-radius: 12px; }
+  .vtGraphClass { background-color: #121212; border: 1px solid #333333; border-radius: 12px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35); display: block; width: 100%; height: 100%; overflow: hidden; }
+  .graph-placeholder { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; pointer-events: none; background-image: radial-gradient(#333333 1px, transparent 1px); background-size: 16px 16px; background-position: center; border-radius: 12px; color: #aaaaaa; font-size: 0.82rem; font-weight: 600; background-color: #1e1e1e; opacity: 0.95; padding: 8px 16px; border: 1px solid #333333; transition: opacity 0.3s ease; z-index: 5; }
   .graph-container.has-data .graph-placeholder { opacity: 0; }
-
   .graph-grid line { stroke: #282828; stroke-width: 1; stroke-dasharray: 3, 3; }
   .graph-grid line.axis-line { stroke: #555555; stroke-width: 1.5; stroke-dasharray: none; }
-
   .vt-line-path { fill: none; stroke: #ff9800; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
   .vt-gps-line-path { fill: none; stroke: #00bcd4; stroke-width: 2.0; stroke-linecap: round; stroke-linejoin: round; }
   .vt-area-path { fill: #ff9800; fill-opacity: 0.12; stroke: none; }
-
   .graph-labels text { fill: #a0aec0; font-size: 10px; font-family: monospace !important; user-select: none; }
   .graph-labels text.axis-title { fill: #ff9800; font-weight: bold; font-size: 11px; }
-
-  .btn-reset-zoom {
-    position: absolute; top: 10px; right: 10px;
-    background: rgba(30, 30, 30, 0.85); color: #ff9800;
-    border: 1px solid #ff9800; padding: 4px 8px; border-radius: 6px;
-    font-size: 0.7rem; font-weight: bold; cursor: pointer; z-index: 10; display: none;
-  }
-
+  .btn-reset-zoom { position: absolute; top: 10px; right: 10px; background: rgba(30, 30, 30, 0.85); color: #ff9800; border: 1px solid #ff9800; padding: 4px 8px; border-radius: 6px; font-size: 0.7rem; font-weight: bold; cursor: pointer; z-index: 10; display: none; }
   .interactive-guideline { stroke: #ff9800; stroke-width: 1; stroke-dasharray: 4, 4; opacity: 0.7; }
   .interactive-focus-point { fill: #ff9800; stroke: #ffffff; stroke-width: 2; }
   .interactive-gps-focus-point { fill: #00bcd4; stroke: #ffffff; stroke-width: 2; }
   .interactive-tooltip-bg { fill: rgba(20, 20, 20, 0.94); stroke: #ff9800; stroke-width: 1; rx: 6; ry: 6; }
   .interactive-tooltip-text { fill: #ffffff; font-size: 10px; font-family: monospace !important; font-weight: bold; }
-
   .category-title { color: #fff !important; font-size: 0.95rem; font-weight: 800; }
-
-  .page-header-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 15px;
-  }
-
-  .btn-back-nav {
-    background: #2a2a2a;
-    color: #ff9800;
-    border: 1px solid #ff9800;
-    padding: 6px 12px;
-    border-radius: 8px;
-    font-size: 1rem;
-    font-weight: bold;
-    cursor: pointer;
-  }
-
-  .record-header {
-    display: flex; justify-content: space-between; align-items: center;
-    margin-bottom: 12px; border-bottom: 1px solid #333; padding-bottom: 8px;
-  }
-
+  .page-header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; }
+  .btn-back-nav { background: #2a2a2a; color: #ff9800; border: 1px solid #ff9800; padding: 6px 12px; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; }
+  .record-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #333; padding-bottom: 8px; }
   .header-actions { display: flex; gap: 6px; }
-
-  .btn-action {
-    padding: 5px 10px; font-size: 11px; font-weight: bold;
-    border: none; border-radius: 6px; cursor: pointer; white-space: nowrap;
-  }
-
+  .btn-action { padding: 5px 10px; font-size: 11px; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; white-space: nowrap; }
   .btn-export-csv { background-color: #27ae60 !important; color: white !important; }
   .btn-clear-all { background-color: #e74c3c !important; color: white !important; }
-
   .record-table-wrapper { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 6px; }
   .record-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 11px; white-space: nowrap; }
   .record-table th { padding: 8px 4px; border-bottom: 2px solid #333; color: #888; font-weight: 500; }
@@ -304,32 +74,26 @@
   .record-row { transition: background 0.2s; }
   .record-row:hover { background: #252525; }
   .record-data-cell { font-family: 'Noto Sans Mono', monospace !important; font-weight: 700; }
-
   .record-badge { padding: 2px 4px; border-radius: 4px; font-size: 10px; font-weight: 500; display: inline-block; }
   .badge-gmeter { background-color: rgba(255, 152, 0, 0.15); color: #ff9800; }
   .badge-gps { background-color: rgba(0, 188, 212, 0.15); color: #00bcd4; }
   .badge-none { background-color: rgba(120, 120, 120, 0.15); color: #777; }
-
   .btn-delete { background: #442222; color: #ff6666; border: 1px solid #663333; padding: 3px 6px; border-radius: 4px; cursor: pointer; font-size: 0.7rem; }
   .btn-mini-csv { background: #1b4332; color: #2ecc71; border: 1px solid #27ae60; padding: 2px 6px; border-radius: 4px; cursor: pointer; font-size: 0.68rem; font-weight: bold; }
   .btn-mini-vt { background: #3d2b00; color: #ff9800; border: 1px solid #ff9800; padding: 2px 6px; border-radius: 4px; cursor: pointer; font-size: 0.68rem; font-weight: bold; }
-
-  .btn-go-page2 {
-    width: 100%; margin-top: 10px; padding: 10px;
-    background: #252525; color: #ff9800; border: 1px solid #444;
-    border-radius: 8px; font-size: 0.85rem; font-weight: bold; cursor: pointer;
-  }
-
+  .btn-go-page2 { width: 100%; margin-top: 10px; padding: 10px; background: #252525; color: #ff9800; border: 1px solid #444; border-radius: 8px; font-size: 0.85rem; font-weight: bold; cursor: pointer; }
   .pagination-container { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 12px; }
   .btn-page { background: #2a2a2a; color: #ff9800; border: 1px solid #ff9800; padding: 3px 10px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.8rem; }
   .btn-page:disabled { border-color: #444; color: #555; cursor: not-allowed; }
   .page-info { font-size: 0.8rem; color: #aaa; }
-
   .status-tag { font-size: 0.72rem; padding: 3px 6px; border-radius: 4px; display: inline-block; }
   .status-active { background: rgba(46, 204, 113, 0.2); color: #2ecc71; border: 1px solid #2ecc71; }
   .status-inactive { background: rgba(231, 76, 60, 0.2); color: #e74c3c; border: 1px solid #e74c3c; }
   .status-gps { background: rgba(0, 188, 212, 0.2); color: #00bcd4; border: 1px solid #00bcd4; }
   .placeholder-text { color: #555; text-align: center; font-size: 0.8rem; padding: 15px 0; }
+  .diag-box { font-size: 0.68rem; color: #888; border-top: 1px dashed #333; margin-top: 6px; padding-top: 6px; font-family: monospace; }
+  .diag-row { display: flex; justify-content: space-between; margin-top: 2px; }
+  .diag-val { color: #6cf; font-weight: bold; }
   </style>
 </head>
 <body>
@@ -380,12 +144,12 @@
 
       <div class="info">
         <span class="axis-title">X-axis (左右)：</span>
-        <span id="accel-x-val" style="color: #2ecc71; font-weight: bold;">0.000</span> m/s² 
+        <span id="accel-x-val" style="color: #2ecc71; font-weight: bold;">0.000</span> m/s²
       </div>
-      
+
       <div class="info">
         <span class="axis-title">Y-axis (淨推進)：</span>
-        <span id="accel-val" style="color: #ff9800; font-weight: bold;">0.000</span> m/s² 
+        <span id="accel-val" style="color: #ff9800; font-weight: bold;">0.000</span> m/s²
       </div>
 
       <div id="railway-delta-container" class="info" style="color: #3498db; border-top: 1px dashed #222; margin-top: 6px; padding-top: 6px;">
@@ -394,13 +158,20 @@
       </div>
 
       <div class="info" style="font-size: 0.72rem; color: #666; margin-top: 8px; border-top: 1px dashed #333; padding-top: 6px;">
-        測量時長：<span id="timer-val">0.0</span> s 
+        測量時長：<span id="timer-val">0.0</span> s
         <div class="info" style="font-size: 0.72rem; color: #666; margin-top: 6px;">
           積分極速：<span id="max-speed-val">0.0</span> km/h | GPS 極速：<span id="gps-max-speed-val">0.0</span> km/h
         </div>
         <div class="info" style="font-size: 0.72rem; color: #666; margin-top: 6px; border-top: 1px dashed #222; padding-top: 4px;">
           最大加速度：<span id="max-accel-val">0.000</span> m/s² | 最大減速度：<span id="max-decel-val">0.000</span> m/s²
         </div>
+      </div>
+
+      <div class="diag-box">
+        <div class="diag-row"><span>重力總量 |g|</span><span class="diag-val" id="diag-gnorm">9.807</span></div>
+        <div class="diag-row"><span>純重力狀態</span><span class="diag-val" id="diag-pure">--</span></div>
+        <div class="diag-row"><span>坡度重力 (Method C)</span><span class="diag-val" id="diag-slope">0.000</span></div>
+        <div class="diag-row"><span>校正次數</span><span class="diag-val" id="diag-corr">0</span></div>
       </div>
     </div>
 
@@ -415,7 +186,7 @@
       <div id="railway-settings-panel">
         <button type="button" id="btn-toggle-gyro" class="btn-fill" style="width:100%;margin-bottom:8px;color:#2ecc71;border-color:#2ecc71;">互補重力補償：開啟</button>
         <button type="button" id="btn-retry-gyro" class="btn-fill" style="width:100%;margin-bottom:7px;color:#ffc66d;border-color:#a57838;">重新取得感測器權限</button>
-        
+
         <label for="gyro-axis-mode" style="font-size:0.75rem;color:#aaa;display:block;margin-bottom:5px;">陀螺儀角速度軸序</label>
         <select id="gyro-axis-mode" style="width:100%;margin-bottom:10px;background:#252525;color:#ddd;border:1px solid #444;border-radius:7px;padding:8px;font-size:0.8rem;">
           <option value="legacy">舊版軸序：β=X、γ=Y、α=Z</option>
@@ -556,12 +327,12 @@
   </div>
 
   <div style="text-align: center; font-size: 0.75rem; color: #555; margin-top: 15px;">
-    Longhorn 6.1
+    Longhorn 6.2
   </div>
 </div>
 
 <script>
-const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
               (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const axisMultiplier = isIOS ? -1.0 : 1.0;
 
@@ -590,14 +361,14 @@ let currentGpsSpeedMps = -1.0, currentGpsSpeedKmh = 0.0, maxGpsSpeedKmh = 0.0;
 let totalGpsDisplacement = 0.0, currentGpsAccuracy = 999.0, lastGpsUpdateTime = 0;
 let lastLat = null, lastLon = null;
 
-let lastAccelTimestamp = null, lastPointPushTime = 0, recordingStartTime = null, totalRecordedTime = 0.0, timerInterval = null; 
-let lpfAlpha = 0.20; 
+let lastAccelTimestamp = null, lastPointPushTime = 0, recordingStartTime = null, totalRecordedTime = 0.0, timerInterval = null;
+let lpfAlpha = 0.20;
 let vtPointsData = [];
 let p2ActivePointsData = [];
 
 let restDetectionWindow = [];
-const IDLE_RMS_THRESHOLD = 0.025; 
-const TRUE_REST_TIME_REQUIRED = 1200; 
+const IDLE_RMS_THRESHOLD = 0.025;
+const TRUE_REST_TIME_REQUIRED = 1200;
 
 function evaluateEngineIdleRest(currentAccelY, currentGyroRate) {
   const now = performance.now();
@@ -609,7 +380,7 @@ function evaluateEngineIdleRest(currentAccelY, currentGyroRate) {
 
   while (restDetectionWindow.length && restDetectionWindow[0].t < now - TRUE_REST_TIME_REQUIRED) {
     restDetectionWindow.shift();
-  }
+      }
 
   if (restDetectionWindow.length < 15) return false;
 
@@ -652,11 +423,16 @@ let gyroRateHistory = [];
 let filteredZ = 0.0;
 let gyroStatusLastPaint = 0;
 
+// === Method C 專用狀態 ===
+let slopeGravityY = 0.0;          // 當前估計的坡度重力分量 (m/s²)
+let slopeCorrectionCount = 0;     // 累計校正次數
+let lastPureGravityState = false;
+
 function gyroRateFromEvent(rate) {
   if (!rate || ![rate.alpha, rate.beta, rate.gamma].every(Number.isFinite)) return null;
   const deg = gyroAxisMode.startsWith('legacy') ? { x: rate.beta, y: rate.gamma, z: rate.alpha } : { x: rate.alpha, y: rate.beta, z: rate.gamma };
   const sign = gyroAxisMode.endsWith('-reverse') ? -1 : 1;
-  
+
   let rx = deg.x * sign * DEG_TO_RAD;
   let ry = deg.y * sign * DEG_TO_RAD;
   let rz = deg.z * sign * DEG_TO_RAD;
@@ -703,7 +479,7 @@ function updateGyroStatus(force = false) {
   else if (gyroInterrupted) label = '陀螺儀中斷，請重新歸零';
   else if (!gyroRateReady) label = '等待陀螺儀資料...';
   else if (!gyroReferenceReady) label = '已就緒，請靜止按「矯正歸零」';
-  else { label = '鐵道模式：運行中 (純陀螺儀物理信賴版)'; active = true; }
+  else { label = '鐵道模式：運行中 (Method C 坡度獨立補償)'; active = true; }
   el.textContent = label;
   el.className = `status-tag ${active ? 'status-active' : 'status-inactive'}`;
 }
@@ -743,7 +519,7 @@ function stepGyro(rate, now, smoothingAlpha, measuredAccel) {
   gyroLastRateTimestamp = now;
   gyroRateHistory.push({ t: now, ...omega });
   while (gyroRateHistory.length && gyroRateHistory[0].t < now - 2500) gyroRateHistory.shift();
-  
+
   if (gyroReferenceReady && gyroLastTimestamp !== null) {
     const dt = (now - gyroLastTimestamp) / 1000;
     if (!(dt > 0 && dt <= 0.25)) {
@@ -751,7 +527,7 @@ function stepGyro(rate, now, smoothingAlpha, measuredAccel) {
       gyroReferenceReady = false;
     } else {
       const corrected = { x: omega.x - gyroBias.x, y: omega.y - gyroBias.y, z: omega.z - gyroBias.z };
-      
+
       gyroGravity = rotateGravityByGyro(gyroGravity, corrected, dt);
 
       for (const k of ['x','y','z']) {
@@ -804,6 +580,55 @@ function calibrateGyroFromRest() {
   gyroReferenceReady = true;
   gyroLastTimestamp = now;
   updateGyroStatus(true);
+}
+
+// === Method C 核心：獨立坡度估計 ===
+// 不碰卡爾曼 / 陀螺儀的內部狀態，只輸出一個「坡度重力分量」給積分層扣掉
+function updateSlopeGravityMethodC(now) {
+  if (navMode !== 'railway') return;
+
+  const nativeX = filteredX * axisMultiplier;
+  const nativeY = filteredY * axisMultiplier;
+  const nativeZ = filteredZ;
+  const gNorm = Math.hypot(nativeX, nativeY, nativeZ);
+  const gError = Math.abs(gNorm - GYRO_G);
+
+  // 純重力狀態：向量長度接近 g
+  // 門檻 0.12：震動會讓 gNorm 抖動，但通常 < 0.1；加速度會讓 gNorm 明顯偏離
+  const isPureGravity = gError < 0.12;
+
+  // 可信度加權：越接近 g，越可信
+  const trust = Math.exp(-Math.pow(gError, 2) / 0.05);
+
+  if (isPureGravity) {
+    // 純重力時，nativeY 就是「真實坡度重力分量」（乘上 axisMultiplier 已對齊）
+    // 用「目標值」slowly pull slopeGravityY 過去
+    const targetSlope = nativeY;
+    // alpha 0.02：60Hz 下約 1 秒收斂一半，不會突然跳動
+    const alpha = 0.02 * Math.max(trust, 0.3);
+    slopeGravityY += alpha * (targetSlope - slopeGravityY);
+    slopeCorrectionCount++;
+  }
+  // 非純重力時：什麼都不做（保留上一次的坡度估計）
+  // 這正是 Method C 的核心：加速度計只在「沒有加速度」時可信
+
+  lastPureGravityState = isPureGravity;
+
+  // 診斷更新（節流，避免每幀寫 DOM）
+  if (now - (updateSlopeGravityMethodC._lastPaint || 0) > 200) {
+    updateSlopeGravityMethodC._lastPaint = now;
+    const gnormEl = document.getElementById('diag-gnorm');
+    const pureEl = document.getElementById('diag-pure');
+    const slopeEl = document.getElementById('diag-slope');
+    const corrEl = document.getElementById('diag-corr');
+    if (gnormEl) gnormEl.textContent = gNorm.toFixed(3);
+    if (pureEl) {
+      pureEl.textContent = isPureGravity ? '是' : '否';
+      pureEl.style.color = isPureGravity ? '#2ecc71' : '#e74c3c';
+    }
+    if (slopeEl) slopeEl.textContent = slopeGravityY.toFixed(3);
+    if (corrEl) corrEl.textContent = slopeCorrectionCount;
+  }
 }
 
 const graphStates = {
@@ -962,57 +787,59 @@ function initSensorListener() {
     let cleanAccelY = filteredY - yOffset;
     let omega = { x: 0, y: 0, z: 0 };
 
+    let accelForIntegration = cleanAccelY;
+
     if (navMode === 'railway') {
       const measuredAccel = { x: filteredX, y: filteredY, z: filteredZ };
       omega = stepGyro(event.rotationRate, now, lpfAlpha, measuredAccel) || { x: 0, y: 0, z: 0 };
 
-      let deltaY = 0.0;
+      // === Method C：獨立更新坡度重力分量 ===
+      updateSlopeGravityMethodC(now);
+
+      // 陀螺儀的 deltaY 保留作為「診斷顯示」，但不參與積分
+      let gyroDeltaY = 0.0;
       if (gyroEnabled && gyroReferenceReady) {
         const rawDeltaY = (gyroSmoothedGravity.y - gyroReferenceGravity.y) * axisMultiplier;
-        
-        // 坡度重力補償閾值維持 0.002g
         const slopeThreshold = 0.002 * GYRO_G;
         if (Math.abs(rawDeltaY) >= slopeThreshold) {
-          deltaY = rawDeltaY;
-        } else {
-          deltaY = 0.0;
+          gyroDeltaY = rawDeltaY;
         }
-
-        cleanAccelY -= deltaY;
       }
-      gyroDeltaYEl.textContent = deltaY.toFixed(3);
+      gyroDeltaYEl.textContent = gyroDeltaY.toFixed(3);
 
-      if (currentSpeed < 1.0 && evaluateEngineIdleRest(cleanAccelY, omega)) {
-        cleanAccelY = 0.0;
+      // === 關鍵：用 Method C 的 slopeGravityY 扣掉坡度 ===
+      accelForIntegration = cleanAccelY - slopeGravityY;
+
+      if (currentSpeed < 1.0 && evaluateEngineIdleRest(accelForIntegration, omega)) {
+        accelForIntegration = 0.0;
         currentSpeed = 0.0;
+        // ZUPT 時也重置坡度估計為「當前 nativeY」，因為車靜止時 nativeY 就是真實坡度
+        slopeGravityY = filteredY * axisMultiplier;
       }
     }
 
-    // 保留死區 (Deadband = 0.0008g)，過濾微小背景雜訊
+    // 死區
     const ACCEL_DEADBAND = 0.0008 * GYRO_G;
-    if (Math.abs(cleanAccelY) < ACCEL_DEADBAND) {
-      cleanAccelY = 0.0;
+    if (Math.abs(accelForIntegration) < ACCEL_DEADBAND) {
+      accelForIntegration = 0.0;
     }
 
-    // [已完全移除人工巡航阻尼 currentSpeed *= 0.985]
-    // 我們完全信賴陀螺儀與重力補償的物理計算結果
-
-    accelValEl.textContent = cleanAccelY.toFixed(3);
+    accelValEl.textContent = accelForIntegration.toFixed(3);
     accelXValEl.textContent = cleanAccelX.toFixed(3);
 
     if (isAccelRecording || isGpsRecording) {
-      if (cleanAccelY > maxAccelVal) { maxAccelVal = cleanAccelY; maxAccelValEl.textContent = maxAccelVal.toFixed(3); }
-      if (cleanAccelY < 0) {
-        let decelMag = Math.abs(cleanAccelY);
+      if (accelForIntegration > maxAccelVal) { maxAccelVal = accelForIntegration; maxAccelValEl.textContent = maxAccelVal.toFixed(3); }
+      if (accelForIntegration < 0) {
+        let decelMag = Math.abs(accelForIntegration);
         if (decelMag > maxDecelVal) { maxDecelVal = decelMag; maxDecelValEl.textContent = maxDecelVal.toFixed(3); }
       }
 
       if (lastAccelTimestamp !== null) {
-        let dt = (now - lastAccelTimestamp) / 1000.0; 
-        if (dt > 0 && dt < 0.5) { 
+        let dt = (now - lastAccelTimestamp) / 1000.0;
+        if (dt > 0 && dt < 0.5) {
           if (isAccelRecording) {
-            currentSpeed += cleanAccelY * dt;
-            if (currentSpeed < 0) currentSpeed = 0.0; 
+            currentSpeed += accelForIntegration * dt;
+            if (currentSpeed < 0) currentSpeed = 0.0;
             totalDisplacement += currentSpeed * dt;
 
             let speedKmh = currentSpeed * 3.6;
@@ -1036,10 +863,10 @@ function initSensorListener() {
             let activeAccelKmh = isAccelRecording ? (currentSpeed * 3.6) : 0.0;
             let activeGpsKmh = (isGpsRecording && (now - lastGpsUpdateTime < 3000) && currentGpsSpeedKmh >= 0) ? currentGpsSpeedKmh : 0.0;
 
-            vtPointsData.push({ 
-              t: totalRecordedTime, 
-              v: activeAccelKmh, 
-              gv: activeGpsKmh 
+            vtPointsData.push({
+              t: totalRecordedTime,
+              v: activeAccelKmh,
+              gv: activeGpsKmh
             });
 
             drawGraphToElement('p1', vtPointsData);
@@ -1155,12 +982,12 @@ function drawGraphToElement(prefix, points) {
   const graphWidth = 500 - paddingLeft - paddingRight, graphHeight = paddingBottom - paddingTop;
 
   let maxVInPoints = 0;
-  points.forEach(p => { 
-    if (p.v > maxVInPoints) maxVInPoints = p.v; 
+  points.forEach(p => {
+    if (p.v > maxVInPoints) maxVInPoints = p.v;
     if (p.gv > maxVInPoints) maxVInPoints = p.gv;
   });
 
-  const maxV = Math.max(prefix === 'p1' ? Math.max(maxSpeedKmh, maxGpsSpeedKmh) : 0, maxVInPoints, 5); 
+  const maxV = Math.max(prefix === 'p1' ? Math.max(maxSpeedKmh, maxGpsSpeedKmh) : 0, maxVInPoints, 5);
   const maxT = points.length > 1 ? Math.max(points[points.length - 1].t, 5) : 10;
 
   const numYTicks = 5, vStep = maxV / numYTicks, yStepPx = graphHeight / numYTicks;
@@ -1272,7 +1099,7 @@ function initVtGraphInteractivity(prefix) {
       const currentDistance = getPinchDistance(e);
       const scaleFactor = currentDistance / st.initialPinchDistance;
       st.zoomScale = Math.min(Math.max(st.initialScale * scaleFactor, 1.0), 5.0);
-      
+
       const maxPan = 0;
       const minPan = -(500 * (st.zoomScale - 1));
       if (st.panTranslateX < minPan) st.panTranslateX = minPan;
@@ -1283,7 +1110,7 @@ function initVtGraphInteractivity(prefix) {
       if (st.isDragging) {
         const deltaX = e.touches[0].clientX - st.startDragX;
         st.panTranslateX = st.startPanX + deltaX;
-        
+
         const minPan = -(500 * (st.zoomScale - 1));
         if (st.panTranslateX > 0) st.panTranslateX = 0;
         if (st.panTranslateX < minPan) st.panTranslateX = minPan;
@@ -1317,8 +1144,8 @@ function initVtGraphInteractivity(prefix) {
     const graphHeight = paddingBottom - paddingTop;
 
     let maxVInPoints = 0;
-    points.forEach(p => { 
-      if (p.v > maxVInPoints) maxVInPoints = p.v; 
+    points.forEach(p => {
+      if (p.v > maxVInPoints) maxVInPoints = p.v;
       if (p.gv > maxVInPoints) maxVInPoints = p.gv;
     });
     const maxV = Math.max(prefix === 'p1' ? Math.max(maxSpeedKmh, maxGpsSpeedKmh) : 0, maxVInPoints, 5);
@@ -1422,21 +1249,25 @@ function resetZoomState(prefix) {
 }
 
 btnZero.addEventListener('click', () => {
-  xOffset = filteredX; 
-  yOffset = filteredY; 
+  xOffset = filteredX;
+  yOffset = filteredY;
   isCalibrated = true;
-  
+
   if (navMode === 'railway') {
     calibrateGyroFromRest();
   }
 
-  currentSpeed = 0.0; 
-  totalDisplacement = 0.0; 
+  // Method C：校準時把坡度估計歸零（因為此刻車站水平、車靜止）
+  slopeGravityY = 0.0;
+  slopeCorrectionCount = 0;
+
+  currentSpeed = 0.0;
+  totalDisplacement = 0.0;
   totalGpsDisplacement = 0.0;
-  maxAccelVal = 0.0; 
-  maxDecelVal = 0.0; 
+  maxAccelVal = 0.0;
+  maxDecelVal = 0.0;
   vtPointsData = [];
-  
+
   resetZoomState('p1');
   document.getElementById('p1-vtContainer').classList.remove('has-data');
   document.getElementById('p1-vtLine').setAttribute('d', '');
@@ -1449,7 +1280,7 @@ btnZero.addEventListener('click', () => {
 
   biasDisplayYEl.value = yOffset.toFixed(4) + " m/s²";
   calibStatusEl.className = "status-tag status-active";
-  calibStatusEl.textContent = navMode === 'railway' ? "已完成校準：鐵道模式 (純陀螺儀物理信賴)" : "已完成校準：普通模式偏置已鎖定";
+  calibStatusEl.textContent = navMode === 'railway' ? "已完成校準：鐵道模式 (Method C)" : "已完成校準：普通模式偏置已鎖定";
 });
 
 btnToggleAccel.addEventListener('click', async () => {
@@ -1509,6 +1340,7 @@ btnReset.addEventListener('click', async () => {
   currentSpeed = 0.0; maxSpeedKmh = 0.0; maxGpsSpeedKmh = 0.0;
   maxAccelVal = 0.0; maxDecelVal = 0.0; totalDisplacement = 0.0; totalGpsDisplacement = 0.0;
   totalRecordedTime = 0.0; lastAccelTimestamp = null; vtPointsData = [];
+  slopeGravityY = 0.0; slopeCorrectionCount = 0;
 
   resetZoomState('p1');
   document.getElementById('p1-vtContainer').classList.remove('has-data');
@@ -1546,7 +1378,7 @@ function addRecord(maxSpeed, maxGpsSpeed, displacement, gpsDisplacement, duratio
     duration: duration.toFixed(1) + " s",
     vtPoints: vtPoints || []
   });
-  
+
   saveRecordsToStorage();
   renderP1Records();
   if (page2.classList.contains('active')) renderP2Records();
@@ -1710,8 +1542,8 @@ window.exportSingleCsv = function(id) {
   }
 
   let csv = "\uFEFF時間(s),積分速度(km/h),GPS速度(km/h)\n";
-  target.vtPoints.forEach(pt => { 
-    csv += `${pt.t.toFixed(2)},${pt.v.toFixed(2)},${(pt.gv || 0).toFixed(2)}\n`; 
+  target.vtPoints.forEach(pt => {
+    csv += `${pt.t.toFixed(2)},${pt.v.toFixed(2)},${(pt.gv || 0).toFixed(2)}\n`;
   });
 
   downloadCsvBlob(csv, `speed_data_${target.time.replace(/:/g, '-')}.csv`);
