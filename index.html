@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>加速度積分 與 GPS 測速器 Longhorn 6.6</title>
+  <title>加速度積分 與 GPS 測速器 Longhorn 6.7</title>
   <style>
   * { box-sizing: border-box; }
   body { margin: 0; background: #121212; color: #e0e0e0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; justify-content: center; padding: 12px; width: 100%; }
@@ -327,7 +327,7 @@
   </div>
 
   <div style="text-align: center; font-size: 0.75rem; color: #555; margin-top: 15px;">
-    Longhorn 6.6
+    Longhorn 6.7
   </div>
 </div>
 
@@ -420,6 +420,8 @@ let gyroReferenceGravity = { x: 0, y: 0, z: GYRO_G };
 let gyroGravity = { x: 0, y: 0, z: GYRO_G };
 let gyroSmoothedGravity = { x: 0, y: 0, z: GYRO_G };
 let gyroBias = { x: 0, y: 0, z: 0 };
+let gyroFineLast = { x: 0, y: 0, z: 0 };   // 最近一次「無死區」角速度（停車時用來重新量偏差）
+const GYRO_NOISE_GATE = 0.0015;            // 扣掉偏差後，小於此值(rad/s，約 0.09°/s)視為雜訊，不矯正
 let gyroRateHistory = [];
 let filteredZ = 0.0;
 let gyroStatusLastPaint = 0;
@@ -527,6 +529,7 @@ function stepGyro(rate, now, smoothingAlpha, measuredAccel) {
     return null;
   }
   gyroRateReady = true;
+  gyroFineLast = omegaFine;
   gyroLastRateTimestamp = now;
   gyroRateHistory.push({ t: now, ...omegaFine });
   while (gyroRateHistory.length && gyroRateHistory[0].t < now - 2500) gyroRateHistory.shift();
@@ -538,6 +541,9 @@ function stepGyro(rate, now, smoothingAlpha, measuredAccel) {
       gyroReferenceReady = false;
     } else {
       const corrected = { x: omegaFine.x - gyroBias.x, y: omegaFine.y - gyroBias.y, z: omegaFine.z - gyroBias.z };
+      for (const k of ['x','y','z']) {
+        if (Math.abs(corrected[k]) < GYRO_NOISE_GATE) corrected[k] = 0;   // 偏差太小就不矯正
+      }
 
       gyroGravity = rotateGravityByGyro(gyroGravity, corrected, dt);
 
@@ -807,6 +813,10 @@ function initSensorListener() {
       if (atRest) {
         accelForIntegration = 0.0;
         currentSpeed = 0.0;
+        // 停車時真實轉動為 0，此刻量到的角速度就是陀螺儀偏差：慢慢更新，抵消漂移
+        gyroBias.x += 0.02 * (gyroFineLast.x - gyroBias.x);
+        gyroBias.y += 0.02 * (gyroFineLast.y - gyroBias.y);
+        gyroBias.z += 0.02 * (gyroFineLast.z - gyroBias.z);
         // 只在「剛進入靜止」的那一瞬間重設坡度偏差（歸零後的讀值全是坡度分力）。
         // 靜止期間坡度固定不動；否則列車起步的加速度會被一路當成坡度吃掉，永遠離不開靜止。
         if (!wasAtRest) {
