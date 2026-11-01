@@ -171,9 +171,7 @@
         <div class="diag-row"><span>重力總量 |g|</span><span class="diag-val" id="diag-gnorm">9.807</span></div>
         <div class="diag-row"><span>坡度來源</span><span class="diag-val" id="diag-pure">--</span></div>
         <div class="diag-row"><span>坡度重力分量</span><span class="diag-val" id="diag-slope">0.000</span></div>
-        <div class="diag-row"><span>GPS 參考誤差（不參與積分）</span><span class="diag-val" id="diag-slope-err">0.000</span></div>
         <div class="diag-row"><span>靜止歸零次數</span><span class="diag-val" id="diag-jump">0</span></div>
-        <div class="diag-row"><span>GPS 參考比對次數</span><span class="diag-val" id="diag-corr">0</span></div>
       </div>
     </div>
 
@@ -430,23 +428,16 @@ let gyroStatusLastPaint = 0;
 let slopeGravityY = 0.0;          // 當前估計的坡度重力分量 (m/s²)，與「歸零後的加速度」同一基準
 let slopeBias = 0.0;              // 陀螺儀估計的修正量（由 GPS / 靜止慢慢校正）
 let slopeGyroPart = 0.0;          // 陀螺儀算出的「相對歸零時」的重力 Y 變化
-let slopeCorrectionCount = 0;     // GPS 參考比對次數
 let slopeJumpCount = 0;           // 靜止歸零次數
-let slopeError = 0.0;             // 最近一次與 GPS 參考的差（僅顯示）
-let slopeAccelHist = [];          // 近 5 秒手機讀值 {t, a}
-let slopeGpsHist = [];            // 近 5 秒 GPS 速度 {t, v}
-let slopeLastGpsStamp = 0;
 let slopeSource = '--';
 
 function resetSlopeState() {
   slopeGravityY = 0.0; slopeBias = 0.0; slopeGyroPart = 0.0;
-  slopeCorrectionCount = 0; slopeJumpCount = 0; slopeError = 0.0;
-  slopeAccelHist = []; slopeGpsHist = [];
-  slopeLastGpsStamp = lastGpsUpdateTime;
+  slopeJumpCount = 0;
   slopeSource = '--';
 }
 
-function gyroRateFromEvent(rate) {
+function gyroRateFromEvent(rate, deadZone = 0.01) {
   if (!rate || ![rate.alpha, rate.beta, rate.gamma].every(Number.isFinite)) return null;
   const deg = gyroAxisMode.startsWith('legacy') ? { x: rate.beta, y: rate.gamma, z: rate.alpha } : { x: rate.alpha, y: rate.beta, z: rate.gamma };
   const sign = gyroAxisMode.endsWith('-reverse') ? -1 : 1;
@@ -455,10 +446,9 @@ function gyroRateFromEvent(rate) {
   let ry = deg.y * sign * DEG_TO_RAD;
   let rz = deg.z * sign * DEG_TO_RAD;
 
-  const DEAD_ZONE = 0.01;
-  if (Math.abs(rx) < DEAD_ZONE) rx = 0;
-  if (Math.abs(ry) < DEAD_ZONE) ry = 0;
-  if (Math.abs(rz) < DEAD_ZONE) rz = 0;
+  if (Math.abs(rx) < deadZone) rx = 0;
+  if (Math.abs(ry) < deadZone) ry = 0;
+  if (Math.abs(rz) < deadZone) rz = 0;
 
   return { x: rx, y: ry, z: rz };
 }
@@ -523,8 +513,9 @@ function requestGyroPermissionFromGesture() {
 }
 
 function stepGyro(rate, now, smoothingAlpha, measuredAccel) {
-  const omega = gyroRateFromEvent(rate);
-  if (!omega) {
+  const omega = gyroRateFromEvent(rate);                 // 有死區：只給「靜止判斷」用
+  const omegaFine = gyroRateFromEvent(rate, 0);          // 無死區：用來推算坡度（慢速傾斜也量得到）
+  if (!omega || !omegaFine) {
     if (gyroReferenceReady && gyroLastRateTimestamp !== null && now - gyroLastRateTimestamp > 600) {
       gyroInterrupted = true;
       gyroReferenceReady = false;
@@ -535,7 +526,7 @@ function stepGyro(rate, now, smoothingAlpha, measuredAccel) {
   }
   gyroRateReady = true;
   gyroLastRateTimestamp = now;
-  gyroRateHistory.push({ t: now, ...omega });
+  gyroRateHistory.push({ t: now, ...omegaFine });
   while (gyroRateHistory.length && gyroRateHistory[0].t < now - 2500) gyroRateHistory.shift();
 
   if (gyroReferenceReady && gyroLastTimestamp !== null) {
@@ -544,7 +535,7 @@ function stepGyro(rate, now, smoothingAlpha, measuredAccel) {
       gyroInterrupted = true;
       gyroReferenceReady = false;
     } else {
-      const corrected = { x: omega.x - gyroBias.x, y: omega.y - gyroBias.y, z: omega.z - gyroBias.z };
+      const corrected = { x: omegaFine.x - gyroBias.x, y: omegaFine.y - gyroBias.y, z: omegaFine.z - gyroBias.z };
 
       gyroGravity = rotateGravityByGyro(gyroGravity, corrected, dt);
 
@@ -604,7 +595,7 @@ function calibrateGyroFromRest() {
 // 想法（完全不依賴 GPS，地下段也能用）：
 //   坡度分力 = 陀螺儀量到的傾斜變化(g·sinΔθ) + 偏差量
 //   偏差量只在「列車停穩」時重設：停穩時歸零後的讀值全是坡度，直接吻合
-//   GPS 只拿來和估計值對照顯示（診斷面板），不參與積分
+//   完全不使用 GPS
 // 基準：所有數值都「相對歸零當下」，和 cleanAccelY (= filteredY − yOffset) 同一基準
 function updateSlopeGravityMethodC(now) {
   if (navMode !== 'railway') return;
@@ -616,36 +607,6 @@ function updateSlopeGravityMethodC(now) {
     ? (gyroSmoothedGravity.y - gyroReferenceGravity.y) * axisMultiplier
     : 0.0;
 
-  // 2. 記錄近 5 秒的手機讀值
-  slopeAccelHist.push({ t: now, a: cleanY });
-  while (slopeAccelHist.length && slopeAccelHist[0].t < now - 5000) slopeAccelHist.shift();
-
-  // 3. 每收到一筆新的 GPS 速度，算一次「GPS 參考坡度」與估計值的差（純對照）
-  const gpsFresh = (now - lastGpsUpdateTime) < 3000;
-  if (gpsFresh && lastGpsUpdateTime !== slopeLastGpsStamp && currentGpsSpeedMps >= 0 && currentGpsAccuracy < 30) {
-    slopeLastGpsStamp = lastGpsUpdateTime;
-    slopeGpsHist.push({ t: lastGpsUpdateTime, v: currentGpsSpeedMps });
-    while (slopeGpsHist.length && slopeGpsHist[0].t < lastGpsUpdateTime - 5000) slopeGpsHist.shift();
-
-    if (slopeGpsHist.length >= 2) {
-      const first = slopeGpsHist[0];
-      const last = slopeGpsHist[slopeGpsHist.length - 1];
-      const span = (last.t - first.t) / 1000;
-      if (span >= 2.5) {
-        const aGps = (last.v - first.v) / span;               // GPS 算出的真實加速度
-        const seg = slopeAccelHist.filter(p => p.t >= first.t && p.t <= last.t);
-        if (seg.length >= 20) {
-          let sum = 0;
-          for (const p of seg) sum += p.a;
-          const meanA = sum / seg.length;                     // 同一段時間手機平均讀值
-          const target = meanA - aGps;                        // 扣掉真實加速度，剩下的就是坡度
-          // 只用來對照、顯示，不改動 slopeBias，不影響積分
-          slopeError = target - (slopeGyroPart + slopeBias);
-          slopeCorrectionCount++;
-        }
-      }
-    }
-  }
   slopeSource = (gyroEnabled && gyroReferenceReady) ? '陀螺儀+靜止歸零' : '僅靜止歸零';
 
   slopeGravityY = slopeGyroPart + slopeBias;
@@ -657,9 +618,7 @@ function updateSlopeGravityMethodC(now) {
     set('diag-gnorm', gNorm.toFixed(3));
     set('diag-pure', slopeSource);
     set('diag-slope', slopeGravityY.toFixed(3));
-    set('diag-slope-err', slopeError.toFixed(3));
     set('diag-jump', slopeJumpCount);
-    set('diag-corr', slopeCorrectionCount);
   }
 }
 
