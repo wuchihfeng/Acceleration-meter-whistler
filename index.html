@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>加速度積分 與 GPS 測速器 Longhorn 6.9</title>
+  <title>加速度積分 與 GPS 測速器 Longhorn 7.0</title>
   <style>
   * { box-sizing: border-box; }
   body { margin: 0; background: #121212; color: #e0e0e0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; justify-content: center; padding: 12px; width: 100%; }
@@ -327,7 +327,7 @@
   </div>
 
   <div style="text-align: center; font-size: 0.75rem; color: #555; margin-top: 15px;">
-    Longhorn 6.9
+    Longhorn 7.0
   </div>
 </div>
 
@@ -449,7 +449,8 @@ let gyroGravity = { x: 0, y: 0, z: GYRO_G };
 let gyroSmoothedGravity = { x: 0, y: 0, z: GYRO_G };
 let gyroBias = { x: 0, y: 0, z: 0 };
 let gyroFineLast = { x: 0, y: 0, z: 0 };   // 最近一次「無死區」角速度（停車時用來重新量偏差）
-const GYRO_NOISE_GATE = 0.0015;            // 扣掉偏差後，小於此值(rad/s，約 0.09°/s)視為雜訊，不矯正
+const GYRO_NOISE_GATE = 0.002;             // 扣掉偏差後，整個角速度向量小於此值(rad/s，約 0.11°/s)視為雜訊，不矯正
+const AUTO_REST_ZERO = false;              // 自動停車歸零（速度歸 0、坡度重設、陀螺儀偏差重量）。目前改由人工按「矯正歸零」，故關閉
 let gyroRateHistory = [];
 let filteredZ = 0.0;
 let gyroStatusLastPaint = 0;
@@ -569,8 +570,11 @@ function stepGyro(rate, now, smoothingAlpha, measuredAccel) {
       gyroReferenceReady = false;
     } else {
       const corrected = { x: omegaFine.x - gyroBias.x, y: omegaFine.y - gyroBias.y, z: omegaFine.z - gyroBias.z };
-      for (const k of ['x','y','z']) {
-        if (Math.abs(corrected[k]) < GYRO_NOISE_GATE) corrected[k] = 0;   // 偏差太小就不矯正
+      // 偏差太小就不矯正：看「整個角速度向量」的大小，而不是逐軸歸零。
+      // 逐軸歸零會破壞向量方向：過彎時繞鉛直軸旋轉，若某一軸分量被吃掉，
+      // 重力方向就會被錯誤地轉動，坡度估計被「帶著走」。
+      if (Math.hypot(corrected.x, corrected.y, corrected.z) < GYRO_NOISE_GATE) {
+        corrected.x = 0; corrected.y = 0; corrected.z = 0;
       }
 
       gyroGravity = rotateGravityByGyro(gyroGravity, corrected, dt);
@@ -837,10 +841,13 @@ function initSensorListener() {
       // === 關鍵：用 Method C 的 slopeGravityY 扣掉坡度 ===
       accelForIntegration = cleanAccelY - slopeGravityY;
 
-      const stillAll = evaluateStillAllAxes(filteredX, filteredY, filteredZ, omega, now, accelForIntegration);
-      const atRest = currentSpeed < 1.0
-        ? evaluateEngineIdleRest(accelForIntegration, omega)
-        : stillAll;
+      let atRest = false;
+      if (AUTO_REST_ZERO) {
+        const stillAll = evaluateStillAllAxes(filteredX, filteredY, filteredZ, omega, now, accelForIntegration);
+        atRest = currentSpeed < 1.0
+          ? evaluateEngineIdleRest(accelForIntegration, omega)
+          : stillAll;
+      }
       if (atRest) {
         accelForIntegration = 0.0;
         currentSpeed = 0.0;
