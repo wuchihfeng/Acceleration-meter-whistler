@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>加速度積分 與 GPS 測速器 Longhorn 6.3</title>
+  <title>加速度積分 與 GPS 測速器 Longhorn 6.4</title>
   <style>
   * { box-sizing: border-box; }
   body { margin: 0; background: #121212; color: #e0e0e0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; justify-content: center; padding: 12px; width: 100%; }
@@ -169,11 +169,11 @@
 
       <div class="diag-box">
         <div class="diag-row"><span>重力總量 |g|</span><span class="diag-val" id="diag-gnorm">9.807</span></div>
-        <div class="diag-row"><span>純重力狀態</span><span class="diag-val" id="diag-pure">--</span></div>
-        <div class="diag-row"><span>坡度重力 (Method C)</span><span class="diag-val" id="diag-slope">0.000</span></div>
-        <div class="diag-row"><span>坡度誤差</span><span class="diag-val" id="diag-slope-err">0.000</span></div>
-        <div class="diag-row"><span>突變次數</span><span class="diag-val" id="diag-jump">0</span></div>
-        <div class="diag-row"><span>校正次數</span><span class="diag-val" id="diag-corr">0</span></div>
+        <div class="diag-row"><span>坡度來源</span><span class="diag-val" id="diag-pure">--</span></div>
+        <div class="diag-row"><span>坡度重力分量</span><span class="diag-val" id="diag-slope">0.000</span></div>
+        <div class="diag-row"><span>GPS 參考誤差（不參與積分）</span><span class="diag-val" id="diag-slope-err">0.000</span></div>
+        <div class="diag-row"><span>靜止歸零次數</span><span class="diag-val" id="diag-jump">0</span></div>
+        <div class="diag-row"><span>GPS 參考比對次數</span><span class="diag-val" id="diag-corr">0</span></div>
       </div>
     </div>
 
@@ -329,7 +329,7 @@
   </div>
 
   <div style="text-align: center; font-size: 0.75rem; color: #555; margin-top: 15px;">
-    Longhorn 6.3
+    Longhorn 6.4
   </div>
 </div>
 
@@ -346,8 +346,11 @@ async function requestWakeLock() {
 }
 async function releaseWakeLock() {
   if (wakeLock !== null) {
-    try { await wakeLock.release(); wakeLock = null;
-         let navMode = 'railway';
+    try { await wakeLock.release(); wakeLock = null; } catch (err) {}
+  }
+}
+
+let navMode = 'railway';
 
 let isAccelRecording = false, isGpsRecording = false, isCalibrated = false;
 let xOffset = 0.0, yOffset = 0.0;
@@ -368,6 +371,7 @@ let p2ActivePointsData = [];
 let restDetectionWindow = [];
 const IDLE_RMS_THRESHOLD = 0.025;
 const TRUE_REST_TIME_REQUIRED = 1200;
+const REST_MEAN_TOL = 0.05;   // 靜止判斷：扣坡度後的平均加速度容許值 (m/s²)
 
 function evaluateEngineIdleRest(currentAccelY, currentGyroRate) {
   const now = performance.now();
@@ -397,7 +401,7 @@ function evaluateEngineIdleRest(currentAccelY, currentGyroRate) {
   });
   let rms = Math.sqrt(variance / restDetectionWindow.length);
 
-  const isSteadyMean = Math.abs(meanAccel) < 0.015 && Math.abs(meanGyro) < 0.05 * (Math.PI / 180);
+  const isSteadyMean = Math.abs(meanAccel) < REST_MEAN_TOL && Math.abs(meanGyro) < 0.05 * (Math.PI / 180);
   const isValidIdleRms = rms < IDLE_RMS_THRESHOLD;
 
   return isSteadyMean && isValidIdleRms;
@@ -422,13 +426,25 @@ let gyroRateHistory = [];
 let filteredZ = 0.0;
 let gyroStatusLastPaint = 0;
 
-// === Method C 專用狀態 ===
-let slopeGravityY = 0.0;          // 當前估計的坡度重力分量 (m/s²)
-let slopeCorrectionCount = 0;     // 累計校正次數
-let slopeJumpCount = 0;           // 突變偵測次數
-let slopeError = 0.0;             // 當前坡度誤差
-let lastPureGravityState = false;
-let lastFilteredYForSlope = 0.0;  // 用於突變偵測
+// === 坡度估計專用狀態（6.4：陀螺儀 + GPS 判斷） ===
+let slopeGravityY = 0.0;          // 當前估計的坡度重力分量 (m/s²)，與「歸零後的加速度」同一基準
+let slopeBias = 0.0;              // 陀螺儀估計的修正量（由 GPS / 靜止慢慢校正）
+let slopeGyroPart = 0.0;          // 陀螺儀算出的「相對歸零時」的重力 Y 變化
+let slopeCorrectionCount = 0;     // GPS 參考比對次數
+let slopeJumpCount = 0;           // 靜止歸零次數
+let slopeError = 0.0;             // 最近一次與 GPS 參考的差（僅顯示）
+let slopeAccelHist = [];          // 近 5 秒手機讀值 {t, a}
+let slopeGpsHist = [];            // 近 5 秒 GPS 速度 {t, v}
+let slopeLastGpsStamp = 0;
+let slopeSource = '--';
+
+function resetSlopeState() {
+  slopeGravityY = 0.0; slopeBias = 0.0; slopeGyroPart = 0.0;
+  slopeCorrectionCount = 0; slopeJumpCount = 0; slopeError = 0.0;
+  slopeAccelHist = []; slopeGpsHist = [];
+  slopeLastGpsStamp = lastGpsUpdateTime;
+  slopeSource = '--';
+}
 
 function gyroRateFromEvent(rate) {
   if (!rate || ![rate.alpha, rate.beta, rate.gamma].every(Number.isFinite)) return null;
@@ -584,73 +600,66 @@ function calibrateGyroFromRest() {
   updateGyroStatus(true);
 }
 
-// === Method C 核心：獨立坡度估計（6.2.1 改良版） ===
-// 改良點：
-//   1. 動態 alpha：誤差大時快收斂，誤差小時慢微調
-//   2. 突變偵測：filteredY 突然大變時，直接跳到新坡度，不等收斂
+// === 坡度估計核心（6.4） ===
+// 想法（完全不依賴 GPS，地下段也能用）：
+//   坡度分力 = 陀螺儀量到的傾斜變化(g·sinΔθ) + 偏差量
+//   偏差量只在「列車停穩」時重設：停穩時歸零後的讀值全是坡度，直接吻合
+//   GPS 只拿來和估計值對照顯示（診斷面板），不參與積分
+// 基準：所有數值都「相對歸零當下」，和 cleanAccelY (= filteredY − yOffset) 同一基準
 function updateSlopeGravityMethodC(now) {
   if (navMode !== 'railway') return;
 
-  const nativeX = filteredX * axisMultiplier;
-  const nativeY = filteredY * axisMultiplier;
-  const nativeZ = filteredZ;
-  const gNorm = Math.hypot(nativeX, nativeY, nativeZ);
-  const gError = Math.abs(gNorm - GYRO_G);
+  const cleanY = filteredY - yOffset;   // 歸零後、尚未扣坡度的讀值
 
-  const isPureGravity = gError < 0.12;
-  const trust = Math.exp(-Math.pow(gError, 2) / 0.05);
+  // 1. 陀螺儀部分（相對歸零時的重力 Y 變化）
+  slopeGyroPart = (gyroEnabled && gyroReferenceReady)
+    ? (gyroSmoothedGravity.y - gyroReferenceGravity.y) * axisMultiplier
+    : 0.0;
 
-  // --- 突變偵測：filteredY 在短時間內大變 → 坡度突變，直接跳 ---
-  const dFilteredY = Math.abs(filteredY - lastFilteredYForSlope);
-  if (dFilteredY > 0.25) {
-    slopeGravityY = nativeY;
-    slopeJumpCount++;
-  }
-  lastFilteredYForSlope = filteredY;
+  // 2. 記錄近 5 秒的手機讀值
+  slopeAccelHist.push({ t: now, a: cleanY });
+  while (slopeAccelHist.length && slopeAccelHist[0].t < now - 5000) slopeAccelHist.shift();
 
-  if (isPureGravity) {
-    const targetSlope = nativeY;
-    const error = targetSlope - slopeGravityY;
-    const absError = Math.abs(error);
-    slopeError = error;
+  // 3. 每收到一筆新的 GPS 速度，算一次「GPS 參考坡度」與估計值的差（純對照）
+  const gpsFresh = (now - lastGpsUpdateTime) < 3000;
+  if (gpsFresh && lastGpsUpdateTime !== slopeLastGpsStamp && currentGpsSpeedMps >= 0 && currentGpsAccuracy < 30) {
+    slopeLastGpsStamp = lastGpsUpdateTime;
+    slopeGpsHist.push({ t: lastGpsUpdateTime, v: currentGpsSpeedMps });
+    while (slopeGpsHist.length && slopeGpsHist[0].t < lastGpsUpdateTime - 5000) slopeGpsHist.shift();
 
-    // --- 動態 alpha：誤差大時快收斂，誤差小時慢微調 ---
-    let alpha;
-    if (absError > 0.1) {
-      alpha = 0.20;
-    } else if (absError > 0.02) {
-      alpha = 0.08;
-    } else {
-      alpha = 0.015;
+    if (slopeGpsHist.length >= 2) {
+      const first = slopeGpsHist[0];
+      const last = slopeGpsHist[slopeGpsHist.length - 1];
+      const span = (last.t - first.t) / 1000;
+      if (span >= 2.5) {
+        const aGps = (last.v - first.v) / span;               // GPS 算出的真實加速度
+        const seg = slopeAccelHist.filter(p => p.t >= first.t && p.t <= last.t);
+        if (seg.length >= 20) {
+          let sum = 0;
+          for (const p of seg) sum += p.a;
+          const meanA = sum / seg.length;                     // 同一段時間手機平均讀值
+          const target = meanA - aGps;                        // 扣掉真實加速度，剩下的就是坡度
+          // 只用來對照、顯示，不改動 slopeBias，不影響積分
+          slopeError = target - (slopeGyroPart + slopeBias);
+          slopeCorrectionCount++;
+        }
+      }
     }
-    alpha *= Math.max(trust, 0.3);
-
-    slopeGravityY += alpha * error;
-    slopeCorrectionCount++;
-  } else {
-    // 非純重力：坡度誤差無法判斷，保留上一次估計
-    slopeError = 0.0;
   }
+  slopeSource = (gyroEnabled && gyroReferenceReady) ? '陀螺儀+靜止歸零' : '僅靜止歸零';
 
-  lastPureGravityState = isPureGravity;
+  slopeGravityY = slopeGyroPart + slopeBias;
 
   if (now - (updateSlopeGravityMethodC._lastPaint || 0) > 200) {
     updateSlopeGravityMethodC._lastPaint = now;
-    const gnormEl = document.getElementById('diag-gnorm');
-    const pureEl = document.getElementById('diag-pure');
-    const slopeEl = document.getElementById('diag-slope');
-    const slopeErrEl = document.getElementById('diag-slope-err');
-    const jumpEl = document.getElementById('diag-jump');
-    const corrEl = document.getElementById('diag-corr');
-    if (gnormEl) gnormEl.textContent = gNorm.toFixed(3);
-    if (pureEl) {
-      pureEl.textContent = isPureGravity ? '是' : '否';
-      pureEl.style.color = isPureGravity ? '#2ecc71' : '#e74c3c';
-    }
-    if (slopeEl) slopeEl.textContent = slopeGravityY.toFixed(3);
-    if (slopeErrEl) slopeErrEl.textContent = slopeError.toFixed(3);
-    if (jumpEl) jumpEl.textContent = slopeJumpCount;
-    if (corrEl) corrEl.textContent = slopeCorrectionCount;
+    const gNorm = Math.hypot(filteredX * axisMultiplier, filteredY * axisMultiplier, filteredZ);
+    const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+    set('diag-gnorm', gNorm.toFixed(3));
+    set('diag-pure', slopeSource);
+    set('diag-slope', slopeGravityY.toFixed(3));
+    set('diag-slope-err', slopeError.toFixed(3));
+    set('diag-jump', slopeJumpCount);
+    set('diag-corr', slopeCorrectionCount);
   }
 }
 
@@ -836,8 +845,10 @@ function initSensorListener() {
       if (currentSpeed < 1.0 && evaluateEngineIdleRest(accelForIntegration, omega)) {
         accelForIntegration = 0.0;
         currentSpeed = 0.0;
-        // ZUPT 時也重置坡度估計為「當前 nativeY」，因為車靜止時 nativeY 就是真實坡度
-        slopeGravityY = filteredY * axisMultiplier;
+        // 靜止時：歸零後的讀值就全是坡度分力，把偏差量調到剛好吻合
+        slopeBias = cleanAccelY - slopeGyroPart;
+        slopeGravityY = cleanAccelY;
+        slopeJumpCount++;
       }
     }
 
@@ -1280,12 +1291,8 @@ btnZero.addEventListener('click', () => {
     calibrateGyroFromRest();
   }
 
-  // Method C：校準時把坡度估計歸零（因為此刻車站水平、車靜止）
-  slopeGravityY = 0.0;
-  slopeCorrectionCount = 0;
-  slopeJumpCount = 0;
-  slopeError = 0.0;
-  lastFilteredYForSlope = filteredY;
+  // 歸零：此刻定義為坡度 = 0（基準點），所有坡度估計重新開始
+  resetSlopeState();
 
   currentSpeed = 0.0;
   totalDisplacement = 0.0;
@@ -1366,7 +1373,7 @@ btnReset.addEventListener('click', async () => {
   currentSpeed = 0.0; maxSpeedKmh = 0.0; maxGpsSpeedKmh = 0.0;
   maxAccelVal = 0.0; maxDecelVal = 0.0; totalDisplacement = 0.0; totalGpsDisplacement = 0.0;
   totalRecordedTime = 0.0; lastAccelTimestamp = null; vtPointsData = [];
-  slopeGravityY = 0.0; slopeCorrectionCount = 0; slopeJumpCount = 0; slopeError = 0.0;
+  resetSlopeState();
 
   resetZoomState('p1');
   document.getElementById('p1-vtContainer').classList.remove('has-data');
