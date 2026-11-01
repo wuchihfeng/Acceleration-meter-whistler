@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>加速度積分 與 GPS 測速器 Longhorn 6.5</title>
+  <title>加速度積分 與 GPS 測速器 Longhorn 6.6</title>
   <style>
   * { box-sizing: border-box; }
   body { margin: 0; background: #121212; color: #e0e0e0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; justify-content: center; padding: 12px; width: 100%; }
@@ -327,7 +327,7 @@
   </div>
 
   <div style="text-align: center; font-size: 0.75rem; color: #555; margin-top: 15px;">
-    Longhorn 6.5
+    Longhorn 6.6
   </div>
 </div>
 
@@ -430,11 +430,13 @@ let slopeBias = 0.0;              // 陀螺儀估計的修正量（由 GPS / 靜
 let slopeGyroPart = 0.0;          // 陀螺儀算出的「相對歸零時」的重力 Y 變化
 let slopeJumpCount = 0;           // 靜止歸零次數
 let slopeSource = '--';
+let wasAtRest = false;      // 上一瞬間是否判定為靜止
 
 function resetSlopeState() {
   slopeGravityY = 0.0; slopeBias = 0.0; slopeGyroPart = 0.0;
   slopeJumpCount = 0;
   slopeSource = '--';
+  wasAtRest = false;
 }
 
 function gyroRateFromEvent(rate, deadZone = 0.01) {
@@ -801,14 +803,19 @@ function initSensorListener() {
       // === 關鍵：用 Method C 的 slopeGravityY 扣掉坡度 ===
       accelForIntegration = cleanAccelY - slopeGravityY;
 
-      if (currentSpeed < 1.0 && evaluateEngineIdleRest(accelForIntegration, omega)) {
+      const atRest = currentSpeed < 1.0 && evaluateEngineIdleRest(accelForIntegration, omega);
+      if (atRest) {
         accelForIntegration = 0.0;
         currentSpeed = 0.0;
-        // 靜止時：歸零後的讀值就全是坡度分力，把偏差量調到剛好吻合
-        slopeBias = cleanAccelY - slopeGyroPart;
-        slopeGravityY = cleanAccelY;
-        slopeJumpCount++;
+        // 只在「剛進入靜止」的那一瞬間重設坡度偏差（歸零後的讀值全是坡度分力）。
+        // 靜止期間坡度固定不動；否則列車起步的加速度會被一路當成坡度吃掉，永遠離不開靜止。
+        if (!wasAtRest) {
+          slopeBias = cleanAccelY - slopeGyroPart;
+          slopeGravityY = cleanAccelY;
+          slopeJumpCount++;
+        }
       }
+      wasAtRest = atRest;
     }
 
     // 死區
