@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>加速度積分 與 GPS 測速器 Longhorn 6.8</title>
+  <title>加速度積分 與 GPS 測速器 Longhorn 6.9</title>
   <style>
   * { box-sizing: border-box; }
   body { margin: 0; background: #121212; color: #e0e0e0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; justify-content: center; padding: 12px; width: 100%; }
@@ -327,7 +327,7 @@
   </div>
 
   <div style="text-align: center; font-size: 0.75rem; color: #555; margin-top: 15px;">
-    Longhorn 6.8
+    Longhorn 6.9
   </div>
 </div>
 
@@ -376,16 +376,17 @@ const REST_MEAN_TOL = 0.05;   // 靜止判斷：扣坡度後的平均加速度�
 // 這裡改看感測器本身：前後(Y)、左右(X)、上下(Z)三軸都很安靜、陀螺儀也沒在轉，持續 3 秒才算停車。
 // 行駛中的列車即使等速，左右與上下一定有震動，所以不會誤判。
 const STILL_TIME_MS = 3000;
+const STILL_ACCEL_TOL = 0.5;   // 扣掉坡度後，平均加速度超過此值(m/s²)就不可能是停車（避免把平穩的真實加速誤判成停車）
 let stillWindow = [];
-function evaluateStillAllAxes(x, y, z, gyroRate, now) {
-  stillWindow.push({ t: now, x: x, y: y, z: z, g: Math.hypot(gyroRate.x, gyroRate.y, gyroRate.z) });
+function evaluateStillAllAxes(x, y, z, gyroRate, now, accelNet) {
+  stillWindow.push({ t: now, x: x, y: y, z: z, a: accelNet, g: Math.hypot(gyroRate.x, gyroRate.y, gyroRate.z) });
   while (stillWindow.length && stillWindow[0].t < now - STILL_TIME_MS) stillWindow.shift();
   if (stillWindow.length < 100 || now - stillWindow[0].t < STILL_TIME_MS * 0.9) return false;
 
   const n = stillWindow.length;
-  let mx = 0, my = 0, mz = 0, mg = 0;
-  for (const p of stillWindow) { mx += p.x; my += p.y; mz += p.z; mg += p.g; }
-  mx /= n; my /= n; mz /= n; mg /= n;
+  let mx = 0, my = 0, mz = 0, mg = 0, ma = 0;
+  for (const p of stillWindow) { mx += p.x; my += p.y; mz += p.z; mg += p.g; ma += p.a; }
+  mx /= n; my /= n; mz /= n; mg /= n; ma /= n;
   let vx = 0, vy = 0, vz = 0;
   for (const p of stillWindow) {
     vx += (p.x - mx) * (p.x - mx);
@@ -394,7 +395,8 @@ function evaluateStillAllAxes(x, y, z, gyroRate, now) {
   }
   const rx = Math.sqrt(vx / n), ry = Math.sqrt(vy / n), rz = Math.sqrt(vz / n);
   return rx < IDLE_RMS_THRESHOLD && ry < IDLE_RMS_THRESHOLD && rz < IDLE_RMS_THRESHOLD
-      && mg < 0.05 * (Math.PI / 180);
+      && mg < 0.05 * (Math.PI / 180)
+      && Math.abs(ma) < STILL_ACCEL_TOL;
 }
 
 function evaluateEngineIdleRest(currentAccelY, currentGyroRate) {
@@ -835,7 +837,7 @@ function initSensorListener() {
       // === 關鍵：用 Method C 的 slopeGravityY 扣掉坡度 ===
       accelForIntegration = cleanAccelY - slopeGravityY;
 
-      const stillAll = evaluateStillAllAxes(filteredX, filteredY, filteredZ, omega, now);
+      const stillAll = evaluateStillAllAxes(filteredX, filteredY, filteredZ, omega, now, accelForIntegration);
       const atRest = currentSpeed < 1.0
         ? evaluateEngineIdleRest(accelForIntegration, omega)
         : stillAll;
